@@ -5,14 +5,12 @@ import altair as alt
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 
-# --- CSS PERSONALIZADO (Corrigido para manter a beleza dos botões) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    /* Ocultar bolinhas e quadradinhos padrão */
     div[role="radiogroup"] > label > div:first-child,
     div[data-testid="stCheckbox"] > label > div:first-child { display: none; }
     
-    /* Estilo base de todos os botões (O FORMATO ORIGINAL EXCELENTE) */
     div[role="radiogroup"] > label,
     div[data-testid="stCheckbox"] > label {
         background-color: #1E2130; border: 1px solid #4a4f63; padding: 10px 15px;
@@ -21,24 +19,22 @@ st.markdown("""
         width: 100%;
     }
     
-    /* Efeito ao passar o mouse */
     div[role="radiogroup"] > label:hover,
     div[data-testid="stCheckbox"] > label:hover { border-color: #ff4b4b; }
     
-    /* Efeito de Botão SELECIONADO (Ativo com cor vermelha e brilho) */
     div[role="radiogroup"] > label:has(input:checked),
     div[data-testid="stCheckbox"] > label:has(input:checked) {
         background-color: #ff4b4b; color: white; border-color: #ff4b4b;
         box-shadow: 0 0 10px rgba(255, 75, 75, 0.3);
     }
 
-    /* --- ESPECÍFICO 1: Menu Lateral (Mantém o bloco, mas joga texto pra esquerda) --- */
+    /* ESPECÍFICO 1: Menu Lateral */
     section[data-testid="stSidebar"] div[role="radiogroup"] > label {
         justify-content: flex-start;
         padding-left: 20px;
     }
 
-    /* --- ESPECÍFICO 2: Filtros Principais (Lado a Lado / 50% pra cada) --- */
+    /* ESPECÍFICO 2: Filtros Principais */
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
         display: flex; flex-direction: row; gap: 15px; width: 100%;
     }
@@ -46,7 +42,7 @@ st.markdown("""
         flex: 1; margin: 0; padding: 12px;
     }
 
-    /* --- ESPECÍFICO 3: Checkboxes dos Anos (Coladinhos) --- */
+    /* ESPECÍFICO 3: Checkboxes dos Anos */
     div[data-testid="stCheckbox"] > label {
         padding: 6px 0px; font-size: 14px; margin: 0;
     }
@@ -85,7 +81,6 @@ menu = st.sidebar.radio(
 def carregar_dados():
     url = "https://docs.google.com/spreadsheets/d/1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc/export?format=csv&gid=0"
     df = pd.read_csv(url)
-    
     df.columns = [str(col).strip().upper() for col in df.columns]
 
     if 'ANO' not in df.columns and 'DATA' in df.columns:
@@ -121,7 +116,6 @@ if menu == "1. VISÃO GERAL":
             anos_selecionados = []
             
             if modo_analise == "ANÁLISE INDIVIDUAL":
-                # SOLUÇÃO PARA O DROPDOWN GIGANTE: Usar colunas para restringir a largura
                 col_drop, col_vazia = st.columns([2, 8]) 
                 ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis)
                 anos_selecionados = [ano_escolhido]
@@ -160,7 +154,6 @@ if menu == "1. VISÃO GERAL":
                     areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
                     areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT"]]
                     
-                    # Restringindo largura do dropdown de Área
                     col_area_drop, _ = st.columns([3, 7])
                     area_selecionada = col_area_drop.selectbox("SELECIONE A ÁREA:", ["TODAS AS ÁREAS"] + areas_disponiveis)
                     
@@ -183,8 +176,12 @@ if menu == "1. VISÃO GERAL":
                     # --- CARDS PRINCIPAIS: PROCEDIMENTOS E VÍTIMAS ---
                     total_procedimentos = len(df_filtrado)
                     
+                    # 🔴 AQUI ESTÁ O "TRATOR" QUE RESOLVE AS VÍTIMAS:
+                    # Converte forçadamente para número ignorando erros, espaços e vírgulas textuais.
                     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
-                        total_vitimas = df_filtrado[COL_VITIMAS].dropna().astype(float).sum()
+                        vitimas_raw = df_filtrado[COL_VITIMAS]
+                        if isinstance(vitimas_raw, pd.DataFrame): vitimas_raw = vitimas_raw.iloc[:, 0]
+                        total_vitimas = pd.to_numeric(vitimas_raw.astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
                     else:
                         total_vitimas = 0
 
@@ -232,20 +229,18 @@ if menu == "1. VISÃO GERAL":
 
                     st.write("<br>", unsafe_allow_html=True)
 
-                    # --- ANÁLISE ORCRIM ---
+                    # --- ANÁLISE ORCRIM (A VOLTA DOS CARDS GIGANTES) ---
                     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
                     
                     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
                     col_orcrim = sugestoes_orcrim[0] if sugestoes_orcrim else (df_filtrado.columns[30] if len(df_filtrado.columns) > 30 else None)
 
                     if col_orcrim:
-                        # Extrai a coluna de forma segura (garante que não é um DataFrame)
                         col_orcrim_data = df_filtrado[col_orcrim]
                         if isinstance(col_orcrim_data, pd.DataFrame):
                             col_orcrim_data = col_orcrim_data.iloc[:, 0]
                         
                         def classificar_orcrim(texto):
-                            # AQUI MORRE O ERRO DO FLOAT! (O texto=str() estava faltando aqui na execução)
                             texto = str(texto).strip().upper() 
                             if "INVESTIGA" in texto: return "EM INVESTIGAÇÃO"
                             if "X MIL" in texto or "VS MIL" in texto: return "TRÁFICO X MILÍCIA"
@@ -253,21 +248,23 @@ if menu == "1. VISÃO GERAL":
                             if "MILÍCIA" in texto or "MILICIA" in texto: return "MILÍCIA"
                             return "OUTROS"
 
-                        # Aplicamos a função na variável limpa e protegida
                         df_filtrado['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
                         
-                        df_orcrim = df_filtrado[df_filtrado['ORCRIM_CLASSIFICADO'] != "OUTROS"]
+                        tot_investiga = len(df_filtrado[df_filtrado['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO'])
+                        tot_trafico = len(df_filtrado[df_filtrado['ORCRIM_CLASSIFICADO'] == 'TRÁFICO'])
+                        tot_milicia = len(df_filtrado[df_filtrado['ORCRIM_CLASSIFICADO'] == 'MILÍCIA'])
+                        tot_traf_mil = len(df_filtrado[df_filtrado['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA'])
+
+                        card1, card2, card3, card4 = st.columns(4)
                         
-                        if not df_orcrim.empty:
-                            tabela_orcrim = df_orcrim.groupby(['ORCRIM_CLASSIFICADO', 'ANO']).size().reset_index(name='TOTAL')
-                            
-                            grafico_orcrim = alt.Chart(tabela_orcrim).mark_bar().encode(
-                                x=alt.X('TOTAL:Q', title='Ocorrências'), y=alt.Y('ORCRIM_CLASSIFICADO:N', sort='-x', title=''),
-                                color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")), tooltip=['ORCRIM_CLASSIFICADO', 'ANO', 'TOTAL']
-                            ).properties(height=300)
-                            st.altair_chart(grafico_orcrim, use_container_width=True)
-                        else:
-                            st.info("Nenhum dado válido de Tráfico, Milícia ou Investigação encontrado para este filtro.")
+                        with card1:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
+                        with card2:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
+                        with card3:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
+                        with card4:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
@@ -287,10 +284,8 @@ elif menu == "4. MODO ANALÍTICO":
     try:
         with st.spinner("Carregando tabela completa..."):
             df_raiox = carregar_dados()
-            
             colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
             df_limpo = df_raiox[colunas_limpas]
-            
             st.dataframe(df_limpo)
     except Exception as e:
         st.error(f"Erro ao gerar a tabela: {e}")
