@@ -370,12 +370,11 @@ elif menu == "5. ASSISTENTE IA":
             # Configura a Inteligência Artificial
             genai.configure(api_key=api_key_usuario)
             
-            # Prepara a IA para saber quem ela é e o que está analisando
             df_contexto = carregar_dados()
-            instrucoes_sistema = f"Você é um especialista em análise criminal, inteligência policial e ciência de dados. Você está operando dentro de um Dashboard de Monitoramento de Homicídios. O banco de dados atual possui {len(df_contexto)} registros. As colunas disponíveis são: {', '.join(df_contexto.columns)}. Ajude o usuário a cruzar dados, entender métodos de investigação e analisar cenários de ORCRIM (Tráfico/Milícia)."
+            instrucoes_sistema = f"Você é um especialista em análise criminal, inteligência policial e ciência de dados. Você está operando dentro de um Dashboard de Monitoramento de Homicídios. O banco de dados atual possui {len(df_contexto)} registros. As colunas disponíveis são: {', '.join(df_contexto.columns)}. Ajude o usuário a cruzar dados, entender métodos de investigação e analisar cenários de ORCRIM."
             
-            # Inicializa o cérebro
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=instrucoes_sistema)
+            # AQUI ESTÁ A CORREÇÃO: Nome atualizado do modelo para não dar erro 404
+            model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=instrucoes_sistema)
             
             # Cria a memória do Chat (se não existir ainda)
             if "chat_gemini" not in st.session_state:
@@ -385,7 +384,6 @@ elif menu == "5. ASSISTENTE IA":
             
             # Mostra o histórico na tela
             for msg in st.session_state.mensagens_front:
-                # model no gemini = assistant no streamlit
                 role_tela = "assistant" if msg["role"] == "model" else "user" 
                 with st.chat_message(role_tela):
                     st.markdown(msg["content"])
@@ -394,19 +392,16 @@ elif menu == "5. ASSISTENTE IA":
             pergunta = st.chat_input("Pergunte algo ao Analista Virtual...")
             
             if pergunta:
-                # Mostra a sua pergunta na tela
                 with st.chat_message("user"):
                     st.markdown(pergunta)
                 st.session_state.mensagens_front.append({"role": "user", "content": pergunta})
                 
-                # Manda a pergunta pra IA e recebe a resposta com um loading girando
                 with st.spinner("Analisando padrões..."):
                     resposta_ia = st.session_state.chat_gemini.send_message(pergunta)
                 
-                # Mostra a resposta da IA na tela
                 with st.chat_message("assistant"):
                     st.markdown(resposta_ia.text)
                 st.session_state.mensagens_front.append({"role": "model", "content": resposta_ia.text})
                 
         except Exception as e:
-            st.error(f"Erro na conexão com a IA. Verifique se a sua Chave API está correta. Detalhe técnico: {e}")
+            st.error(f"Erro na conexão com a IA. Detalhe técnico: {e}")
