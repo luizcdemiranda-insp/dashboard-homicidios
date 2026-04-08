@@ -122,52 +122,33 @@ if menu == "1. VISÃO GERAL":
             else:
                 st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
                 
-                def selecionar_todos():
-                    for a in anos_disponiveis: st.session_state[f"chk_{a}"] = True
-                def limpar_selecao():
-                    for a in anos_disponiveis: st.session_state[f"chk_{a}"] = False
+                def selecionar_todos_vg():
+                    for a in anos_disponiveis: st.session_state[f"chk_vg_{a}"] = True
+                def limpar_selecao_vg():
+                    for a in anos_disponiveis: st.session_state[f"chk_vg_{a}"] = False
 
                 for ano in anos_disponiveis:
-                    if f"chk_{ano}" not in st.session_state:
-                        st.session_state[f"chk_{ano}"] = True
+                    if f"chk_vg_{ano}" not in st.session_state:
+                        st.session_state[f"chk_vg_{ano}"] = True
 
                 b1, b2, _ = st.columns([2, 2, 6])
-                b1.button("✓ Todos os anos", on_click=selecionar_todos)
-                b2.button("✗ Limpar seleção", on_click=limpar_selecao)
+                b1.button("✓ Todos os anos", on_click=selecionar_todos_vg, key="btn_all_vg")
+                b2.button("✗ Limpar seleção", on_click=limpar_selecao_vg, key="btn_clear_vg")
                 
                 colunas_anos = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
                 for i, ano in enumerate(anos_disponiveis):
-                    colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_{ano}")
+                    colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_vg_{ano}")
                 
-                anos_selecionados = [ano for ano in anos_disponiveis if st.session_state[f"chk_{ano}"]]
+                anos_selecionados = [ano for ano in anos_disponiveis if st.session_state[f"chk_vg_{ano}"]]
 
             if len(anos_selecionados) > 0:
-                df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
-
-                COL_AREA = next((c for c in df.columns if "ÁREA" in str(c) or "AREA" in str(c)), None)
-                
-                if COL_AREA:
-                    col_area_data = df_filtrado_ano[COL_AREA]
-                    if isinstance(col_area_data, pd.DataFrame): col_area_data = col_area_data.iloc[:, 0]
-
-                    df_filtrado_ano['AREA_LIMPA'] = col_area_data.apply(lambda x: str(x).strip().upper())
-                    areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
-                    areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT"]]
-                    
-                    col_area_drop, _ = st.columns([3, 7])
-                    area_selecionada = col_area_drop.selectbox("SELECIONE A ÁREA:", ["TODAS AS ÁREAS"] + areas_disponiveis)
-                    
-                    if area_selecionada != "TODAS AS ÁREAS":
-                        df_filtrado = df_filtrado_ano[df_filtrado_ano['AREA_LIMPA'] == area_selecionada].copy()
-                    else:
-                        df_filtrado = df_filtrado_ano.copy()
-                else:
-                    df_filtrado = df_filtrado_ano.copy()
+                # Na Visão Geral, filtramos apenas os ANOS (sem filtro de área)
+                df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
 
                 st.write("---")
 
                 if df_filtrado.empty:
-                    st.warning("Nenhuma ocorrência encontrada para os filtros selecionados.")
+                    st.warning("Nenhuma ocorrência encontrada para os anos selecionados.")
                 else:
                     COL_DIA = next((c for c in df.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
                     COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in str(c)), None)
@@ -176,8 +157,6 @@ if menu == "1. VISÃO GERAL":
                     # --- CARDS PRINCIPAIS: PROCEDIMENTOS E VÍTIMAS ---
                     total_procedimentos = len(df_filtrado)
                     
-                    # 🔴 AQUI ESTÁ O "TRATOR" QUE RESOLVE AS VÍTIMAS:
-                    # Converte forçadamente para número ignorando erros, espaços e vírgulas textuais.
                     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
                         vitimas_raw = df_filtrado[COL_VITIMAS]
                         if isinstance(vitimas_raw, pd.DataFrame): vitimas_raw = vitimas_raw.iloc[:, 0]
@@ -229,7 +208,7 @@ if menu == "1. VISÃO GERAL":
 
                     st.write("<br>", unsafe_allow_html=True)
 
-                    # --- ANÁLISE ORCRIM (A VOLTA DOS CARDS GIGANTES) ---
+                    # --- ANÁLISE ORCRIM ---
                     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
                     
                     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
@@ -269,23 +248,104 @@ if menu == "1. VISÃO GERAL":
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
 
-# --- Outras Páginas ---
+# =====================================================================
+# 5. PÁGINA: CASOS POR ÁREA
+# =====================================================================
 elif menu == "2. CASOS POR ÁREA":
     st.header("🗺️ CASOS POR ÁREA DE POLICIAMENTO")
-    st.info("Página em construção...")
+    
+    with st.spinner("Sincronizando banco de dados..."):
+        try:
+            df = carregar_dados()
+            sucesso_dados = True
+        except Exception as e:
+            st.error(f"Erro ao baixar a planilha. Detalhe técnico: {e}")
+            sucesso_dados = False
 
+    if sucesso_dados:
+        df = df.dropna(subset=['ANO'])
+        df['ANO'] = df['ANO'].astype(int).astype(str)
+        anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
+
+        st.subheader("FILTROS DE ÁREA")
+        
+        modo_analise = st.radio(
+            "SELECIONE O FORMATO DA ANÁLISE:", 
+            ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"],
+            key="modo_analise_area" # Necessário para não conflitar com a página 1
+        )
+
+        anos_selecionados = []
+        
+        if modo_analise == "ANÁLISE INDIVIDUAL":
+            col_drop, _ = st.columns([2, 8]) 
+            ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis, key="ano_ind_area")
+            anos_selecionados = [ano_escolhido]
+        else:
+            st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
+            def selecionar_todos_ar():
+                for a in anos_disponiveis: st.session_state[f"chk_ar_{a}"] = True
+            def limpar_selecao_ar():
+                for a in anos_disponiveis: st.session_state[f"chk_ar_{a}"] = False
+
+            for ano in anos_disponiveis:
+                if f"chk_ar_{ano}" not in st.session_state:
+                    st.session_state[f"chk_ar_{ano}"] = True
+
+            b1, b2, _ = st.columns([2, 2, 6])
+            b1.button("✓ Todos os anos", on_click=selecionar_todos_ar, key="btn_all_ar")
+            b2.button("✗ Limpar seleção", on_click=limpar_selecao_ar, key="btn_clear_ar")
+            
+            colunas_anos = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
+            for i, ano in enumerate(anos_disponiveis):
+                colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_ar_{ano}")
+            
+            anos_selecionados = [ano for ano in anos_disponiveis if st.session_state[f"chk_ar_{ano}"]]
+
+        if len(anos_selecionados) > 0:
+            df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
+
+            COL_AREA = next((c for c in df.columns if "ÁREA" in str(c) or "AREA" in str(c)), None)
+            
+            if COL_AREA:
+                col_area_data = df_filtrado_ano[COL_AREA]
+                if isinstance(col_area_data, pd.DataFrame): col_area_data = col_area_data.iloc[:, 0]
+
+                df_filtrado_ano['AREA_LIMPA'] = col_area_data.apply(lambda x: str(x).strip().upper())
+                areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
+                areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT"]]
+                
+                col_area_drop, _ = st.columns([3, 7])
+                area_selecionada = col_area_drop.selectbox("SELECIONE A ÁREA:", ["TODAS AS ÁREAS"] + areas_disponiveis)
+                
+                if area_selecionada != "TODAS AS ÁREAS":
+                    df_filtrado = df_filtrado_ano[df_filtrado_ano['AREA_LIMPA'] == area_selecionada].copy()
+                else:
+                    df_filtrado = df_filtrado_ano.copy()
+            else:
+                df_filtrado = df_filtrado_ano.copy()
+
+            st.write("---")
+            
+            # --- ESPAÇO PREPARADO PARA OS GRÁFICOS DA PÁGINA 2 ---
+            st.info("Filtros configurados com sucesso! Aqui construiremos os gráficos focados na Área selecionada.")
+            st.metric("📊 Procedimentos na seleção atual", len(df_filtrado))
+
+# --- Outras Páginas ---
 elif menu == "3. MOTIVAÇÃO / DELITO":
     st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO")
     st.info("Página em construção...")
 
 elif menu == "4. MODO ANALÍTICO":
-    st.header("🕵️‍♂️ Modo Analítico - Visualização da Planilha")
+    st.header("MODO ANALÍTICO")
     st.write("Esta tela permite que você veja os dados brutos exatamente como o sistema está lendo da nuvem.")
     try:
         with st.spinner("Carregando tabela completa..."):
             df_raiox = carregar_dados()
+            
             colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
             df_limpo = df_raiox[colunas_limpas]
+            
             st.dataframe(df_limpo)
     except Exception as e:
         st.error(f"Erro ao gerar a tabela: {e}")
