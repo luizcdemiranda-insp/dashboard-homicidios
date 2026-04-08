@@ -34,12 +34,12 @@ st.markdown("""
         padding-left: 20px;
     }
 
-    /* ESPECÍFICO 2: Filtros Principais (Lado a Lado simétricos) */
+    /* ESPECÍFICO 2: Filtros Principais (Agora com wrap para vários botões) */
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
-        display: flex; flex-direction: row; gap: 15px; width: 100%;
+        display: flex; flex-direction: row; flex-wrap: wrap; gap: 15px; width: 100%;
     }
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] > label {
-        flex: 1; margin: 0; padding: 12px;
+        flex: 1; min-width: 150px; margin: 0; padding: 12px;
     }
 
     /* ESPECÍFICO 3: Checkboxes dos Anos */
@@ -96,7 +96,6 @@ def gerar_dashboard(df_filtrado):
     COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in str(c)), None)
     COL_VITIMAS = next((c for c in df.columns if "VÍTIMAS" in str(c) or "VITIMAS" in str(c)), None)
 
-    # --- CARDS PRINCIPAIS: PROCEDIMENTOS E VÍTIMAS ---
     total_procedimentos = len(df_filtrado)
     
     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
@@ -122,7 +121,6 @@ def gerar_dashboard(df_filtrado):
     
     col1, col2 = st.columns(2)
 
-    # --- ANÁLISE DIA DA SEMANA ---
     with col1:
         st.markdown("### 📅 CRIMES POR DIA DA SEMANA")
         if COL_DIA:
@@ -139,7 +137,6 @@ def gerar_dashboard(df_filtrado):
                 st.info("Sem dados de Dia da Semana para este filtro.")
         else: st.info("Coluna de Dia da Semana não encontrada.")
 
-    # --- ANÁLISE CIRCUNSCRIÇÃO ---
     with col2:
         st.markdown("### 🗺️ CRIMES POR CIRCUNSCRIÇÃO")
         if COL_CIRCUNSCRICAO:
@@ -157,7 +154,6 @@ def gerar_dashboard(df_filtrado):
 
     st.write("<br>", unsafe_allow_html=True)
 
-    # --- ANÁLISE ORCRIM ---
     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
     
     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
@@ -194,7 +190,6 @@ def gerar_dashboard(df_filtrado):
         with card4:
             st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
 
-
 # =====================================================================
 # 4. PÁGINA: VISÃO GERAL (SÓ ANO)
 # =====================================================================
@@ -223,7 +218,7 @@ if menu == "1. VISÃO GERAL":
             anos_selecionados = []
             
             if modo_analise == "ANÁLISE INDIVIDUAL":
-                col_drop, col_vazia = st.columns([2, 8]) 
+                col_drop, _ = st.columns([2, 8]) 
                 ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis)
                 anos_selecionados = [ano_escolhido]
             else:
@@ -248,7 +243,6 @@ if menu == "1. VISÃO GERAL":
                 anos_selecionados = [ano for ano in anos_disponiveis if st.session_state[f"chk_vg_{ano}"]]
 
             if len(anos_selecionados) > 0:
-                # O filtro da visão geral aplica SÓ o Ano
                 df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
                 st.write("---")
                 if df_filtrado.empty:
@@ -278,7 +272,7 @@ elif menu == "2. CASOS POR ÁREA":
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
-        st.subheader("FILTROS DE ÁREA")
+        st.subheader("FILTROS DE ANÁLISE")
         
         modo_analise = st.radio(
             "SELECIONE O FORMATO DA ANÁLISE:", 
@@ -316,7 +310,8 @@ elif menu == "2. CASOS POR ÁREA":
         if len(anos_selecionados) > 0:
             df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
 
-            # --- O NOVO E PODEROSO SEGUNDO FILTRO (COLUNA S) ---
+            # --- O NOVO FILTRO DE ÁREA (COM BOTÕES LADO A LADO E SEM LIXO) ---
+            st.write("**SELECIONE A ÁREA:**")
             COL_AREA = next((c for c in df.columns if "ÁREA" in str(c) or "AREA" in str(c)), None)
             if not COL_AREA and len(df.columns) > 18:
                 COL_AREA = df.columns[18]
@@ -327,12 +322,18 @@ elif menu == "2. CASOS POR ÁREA":
 
                 df_filtrado_ano['AREA_LIMPA'] = col_area_data.apply(lambda x: str(x).strip().upper())
                 areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
-                areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT"]]
                 
-                col_area_drop, _ = st.columns([3, 7])
-                area_selecionada = col_area_drop.selectbox("SELECIONE A ÁREA:", ["TODAS AS ÁREAS"] + areas_disponiveis)
+                # O filtro mestre que remove os traços e itens vazios ("-", "--", etc)
+                areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT", "-", "--"]]
                 
-                # Se selecionou uma área específica, o funil corta tudo que está fora dela
+                # Trocado Selectbox por Radio Button (Nosso CSS transforma em botões)
+                area_selecionada = st.radio(
+                    "", # Título oculto (pois o st.write já diz o que é)
+                    ["TODAS AS ÁREAS"] + areas_disponiveis,
+                    horizontal=True, # Força a ficar lado a lado
+                    key="radio_area_selecionada"
+                )
+                
                 if area_selecionada != "TODAS AS ÁREAS":
                     df_filtrado = df_filtrado_ano[df_filtrado_ano['AREA_LIMPA'] == area_selecionada].copy()
                 else:
@@ -345,7 +346,6 @@ elif menu == "2. CASOS POR ÁREA":
             if df_filtrado.empty:
                 st.warning(f"Nenhuma ocorrência encontrada na área selecionada para os anos informados.")
             else:
-                # Usa a mesma função gigante, mas agora alimentada só com os dados daquela Área!
                 gerar_dashboard(df_filtrado)
 
 # --- Outras Páginas ---
