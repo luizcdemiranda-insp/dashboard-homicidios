@@ -30,7 +30,15 @@ st.write("---")
 
 # --- MENU LATERAL ---
 st.sidebar.markdown("### NAVEGAÇÃO")
-menu = st.sidebar.radio("", ["1. VISÃO GERAL (MACRO)", "2. CASOS POR ÁREA", "3. MOTIVAÇÃO / DELITO"])
+menu = st.sidebar.radio(
+    "", 
+    [
+        "1. VISÃO GERAL (MACRO)", 
+        "2. CASOS POR ÁREA", 
+        "3. MOTIVAÇÃO / DELITO",
+        "4. MODO RAIO-X (DADOS PUROS)" # Nova página!
+    ]
+)
 
 # =====================================================================
 # 3. FUNÇÃO DE CARGA DE DADOS
@@ -40,7 +48,7 @@ def carregar_dados():
     url = "https://docs.google.com/spreadsheets/d/1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc/export?format=csv&gid=0"
     df = pd.read_csv(url)
     
-    # Padroniza os cabeçalhos forçando tudo para string
+    # Padroniza os cabeçalhos forçando tudo para string maiúscula
     df.columns = [str(col).strip().upper() for col in df.columns]
 
     if 'ANO' not in df.columns and 'DATA' in df.columns:
@@ -49,7 +57,7 @@ def carregar_dados():
     return df
 
 # =====================================================================
-# 4. PÁGINA: VISÃO GERAL (MACRO)
+# 4. PÁGINAS DO SISTEMA
 # =====================================================================
 if menu == "1. VISÃO GERAL (MACRO)":
     with st.spinner("Sincronizando banco de dados..."):
@@ -68,13 +76,42 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
             st.subheader("FILTROS DE ANÁLISE")
             
-            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL (1 ANO)", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"], horizontal=True)
+            # Título alterado: sem o "(1 ano)"
+            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"], horizontal=True)
 
-            if modo_analise == "ANÁLISE INDIVIDUAL (1 ANO)":
+            anos_selecionados = []
+            
+            if modo_analise == "ANÁLISE INDIVIDUAL":
                 ano_escolhido = st.selectbox("SELECIONE O ANO:", anos_disponiveis)
                 anos_selecionados = [ano_escolhido]
             else:
-                anos_selecionados = st.multiselect("SELECIONE OS ANOS PARA COMPARAR:", anos_disponiveis, default=anos_disponiveis[:2])
+                # O NOVO SISTEMA DE SELEÇÃO EXPOSTA PARA COMPARAÇÃO
+                st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
+                
+                # Funções dos botões rápidos
+                def selecionar_todos():
+                    for a in anos_disponiveis: st.session_state[f"chk_{a}"] = True
+                def limpar_selecao():
+                    for a in anos_disponiveis: st.session_state[f"chk_{a}"] = False
+
+                # Cria o estado na memória caso seja a primeira vez abrindo a página
+                for ano in anos_disponiveis:
+                    if f"chk_{ano}" not in st.session_state:
+                        st.session_state[f"chk_{ano}"] = True # Começa com todos marcados
+
+                # Botões lado a lado
+                b1, b2, _ = st.columns([2, 2, 6])
+                b1.button("✓ Todos os anos", on_click=selecionar_todos)
+                b2.button("✗ Limpar seleção", on_click=limpar_selecao)
+                
+                # Exibe as caixinhas de marcação
+                colunas_anos = st.columns(min(len(anos_disponiveis), 6) or 1)
+                for i, ano in enumerate(anos_disponiveis):
+                    colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_{ano}")
+                
+                # Coleta quem ficou marcado
+                anos_selecionados = [ano for ano in anos_disponiveis if st.session_state[f"chk_{ano}"]]
+
 
             if len(anos_selecionados) > 0:
                 df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
@@ -156,17 +193,16 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
                     st.write("<br>", unsafe_allow_html=True)
 
-                    # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM ---
-                    st.markdown("### ⚖️ DISTRIBUIÇÃO DE ORCRIM")
+                    # --- ANÁLISE 4: ATRIBUIÇÃO DE CRIMES (ORCRIM) ---
+                    # Título alterado
+                    st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES")
                     
-                    coluna_orcrim_escolhida = st.selectbox(
-                        "Selecione a coluna exata que contém os dados de ORCRIM:", 
-                        options=df_filtrado.columns.tolist(),
-                        key="seletor_orcrim" # Ajuda a manter a escolha salva na memória
-                    )
+                    # Identificação automática (removido o seletor manual)
+                    sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
+                    col_orcrim = sugestoes_orcrim[0] if sugestoes_orcrim else (df_filtrado.columns[30] if len(df_filtrado.columns) > 30 else None)
 
-                    if coluna_orcrim_escolhida:
-                        col_orcrim_data = df_filtrado[coluna_orcrim_escolhida]
+                    if col_orcrim:
+                        col_orcrim_data = df_filtrado[col_orcrim]
                         if isinstance(col_orcrim_data, pd.DataFrame):
                             col_orcrim_data = col_orcrim_data.iloc[:, 0]
                         
@@ -189,16 +225,10 @@ if menu == "1. VISÃO GERAL (MACRO)":
                             ).properties(height=300)
                             st.altair_chart(grafico_orcrim, use_container_width=True)
                         else:
-                            st.info("Nenhum dado de Tráfico, Milícia ou Investigação encontrado para a coluna selecionada.")
+                            st.info("Nenhum dado de Tráfico, Milícia ou Investigação encontrado para os filtros atuais.")
             
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
-
-        # --- MODO RAIO-X (AGORA MOSTRA TUDO) ---
-        st.write("---")
-        with st.expander("🕵️‍♂️ Modo Raio-X (Ver os dados puros)"):
-            st.write(f"Mostrando todas as **{len(df_filtrado)}** ocorrências que passaram pelo filtro atual:")
-            st.dataframe(df_filtrado) # Removi o .head() para você ver TUDO!
 
 elif menu == "2. CASOS POR ÁREA":
     st.header("🗺️ CASOS POR ÁREA DE POLICIAMENTO")
@@ -207,3 +237,19 @@ elif menu == "2. CASOS POR ÁREA":
 elif menu == "3. MOTIVAÇÃO / DELITO":
     st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO")
     st.info("Página em construção...")
+
+elif menu == "4. MODO RAIO-X (DADOS PUROS)":
+    st.header("🕵️‍♂️ Modo Raio-X - Visualização da Planilha")
+    st.write("Esta tela permite que você veja os dados brutos exatamente como o sistema está lendo da nuvem.")
+    try:
+        with st.spinner("Carregando tabela completa..."):
+            df_raiox = carregar_dados()
+            
+            # Ocultando as colunas que contenham a palavra 'NEUTRA' no cabeçalho
+            colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
+            df_limpo = df_raiox[colunas_limpas]
+            
+            st.success(f"Dados carregados! Exibindo {len(colunas_limpas)} colunas (As colunas com 'NEUTRA' foram ocultadas automaticamente).")
+            st.dataframe(df_limpo)
+    except Exception as e:
+        st.error(f"Erro ao gerar o Raio-X: {e}")
