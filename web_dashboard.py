@@ -37,7 +37,8 @@ with col_esq:
         st.write("")
 
 with col_meio:
-    st.markdown("<h1 style='text-align: center;'>🛡️ VISÃO GERAL DE MONITORAMENTO</h1>", unsafe_allow_html=True)
+    # Título atualizado conforme solicitado!
+    st.markdown("<h1 style='text-align: center;'>🛡️ DASHBOARD DE OCORRÊNCIAS</h1>", unsafe_allow_html=True)
 
 with col_dir:
     try:
@@ -65,7 +66,7 @@ def carregar_dados():
     if 'ANO' not in df.columns and 'DATA' in df.columns:
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     
-    # Padroniza todas as colunas do cabeçalho para MAIÚSCULO
+    # Padroniza o cabeçalho para MAIÚSCULO
     df.columns = [str(col).strip().upper() for col in df.columns]
     return df
 
@@ -89,6 +90,7 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
         st.subheader("FILTROS DE ANÁLISE")
         
+        # Filtro 1: Modo de Análise e Ano
         modo_analise = st.radio(
             "SELECIONE O FORMATO DA ANÁLISE:",
             ["ANÁLISE INDIVIDUAL (1 ANO)", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"],
@@ -96,32 +98,47 @@ if menu == "1. VISÃO GERAL (MACRO)":
         )
 
         anos_selecionados = []
-
         if modo_analise == "ANÁLISE INDIVIDUAL (1 ANO)":
             ano_escolhido = st.selectbox("SELECIONE O ANO:", anos_disponiveis)
             anos_selecionados = [ano_escolhido]
         else:
             anos_selecionados = st.multiselect("SELECIONE OS ANOS PARA COMPARAR:", anos_disponiveis, default=anos_disponiveis[:2])
 
-        st.write("---")
-
+        # Se o ano foi escolhido, prosseguimos para o Filtro de Área
         if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
+            df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
 
-            # --- BUSCA DE COLUNAS ---
+            # Descobrindo a coluna de ÁREA (Coluna S = índice 18, mas vamos buscar pelo nome para garantir)
+            COL_AREA = next((c for c in df.columns if "ÁREA" in c or "AREA" in c), None)
+            if not COL_AREA and len(df.columns) > 18:
+                COL_AREA = df.columns[18] # Força a coluna S caso o nome esteja estranho
+            
+            # Filtro 2: ÁREA
+            if COL_AREA:
+                areas_disponiveis = sorted(df_filtrado_ano[COL_AREA].dropna().astype(str).unique().tolist())
+                # Remove lixos da lista de áreas
+                areas_disponiveis = [a for a in areas_disponiveis if a.strip() != "" and a != "NAN"]
+                
+                area_selecionada = st.selectbox("SELECIONE A ÁREA:", ["TODAS AS ÁREAS"] + areas_disponiveis)
+                
+                # Aplica o filtro de área se não for "TODAS"
+                if area_selecionada != "TODAS AS ÁREAS":
+                    df_filtrado = df_filtrado_ano[df_filtrado_ano[COL_AREA].astype(str) == area_selecionada].copy()
+                else:
+                    df_filtrado = df_filtrado_ano.copy()
+            else:
+                df_filtrado = df_filtrado_ano.copy()
+                st.warning("Coluna de ÁREA não encontrada. Exibindo dados gerais.")
+
+            st.write("---")
+
+            # --- BUSCA DE COLUNAS RESTANTES ---
             COL_DIA = next((c for c in df.columns if "DIA" in c and "SEMANA" in c), None)
             COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in c), None)
-            
-            # O SEGREDO DA COLUNA AE: Pegamos a coluna pelo índice exato (30 = AE)
-            # Se a planilha tiver menos que 31 colunas, o código não quebra, ele apenas avisa.
-            if len(df.columns) >= 31:
-                COL_ORCRIM = df.columns[30] 
-            else:
-                COL_ORCRIM = None
 
             # --- ANÁLISE 1: QUANTIDADE DE PROCEDIMENTOS ---
             total_procedimentos = len(df_filtrado)
-            st.metric(label="📊 TOTAL DE PROCEDIMENTOS (OCORRÊNCIAS) NO PERÍODO", value=f"{total_procedimentos:,}".replace(',', '.'))
+            st.metric(label="📊 TOTAL DE PROCEDIMENTOS (OCORRÊNCIAS) NO PERÍODO E ÁREA SELECIONADOS", value=f"{total_procedimentos:,}".replace(',', '.'))
             st.write("<br>", unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -129,7 +146,7 @@ if menu == "1. VISÃO GERAL (MACRO)":
             # --- ANÁLISE 2: DIA DA SEMANA ---
             with col1:
                 st.markdown("### 📅 CRIMES POR DIA DA SEMANA")
-                if COL_DIA:
+                if COL_DIA and total_procedimentos > 0:
                     tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
                     grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(
                         x=alt.X('TOTAL:Q', title='Ocorrências'),
@@ -139,12 +156,12 @@ if menu == "1. VISÃO GERAL (MACRO)":
                     ).properties(height=350)
                     st.altair_chart(grafico_dia, use_container_width=True)
                 else:
-                    st.warning("Coluna de Dia da Semana não encontrada.")
+                    st.info("Sem dados suficientes para o Dia da Semana.")
 
             # --- ANÁLISE 3: CIRCUNSCRIÇÃO ---
             with col2:
                 st.markdown("### 🗺️ CRIMES POR CIRCUNSCRIÇÃO")
-                if COL_CIRCUNSCRICAO:
+                if COL_CIRCUNSCRICAO and total_procedimentos > 0:
                     tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
                     grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(
                         x=alt.X('TOTAL:Q', title='Ocorrências'),
@@ -154,34 +171,47 @@ if menu == "1. VISÃO GERAL (MACRO)":
                     ).properties(height=350)
                     st.altair_chart(grafico_circ, use_container_width=True)
                 else:
-                    st.warning("Coluna de Circunscrição não encontrada.")
+                    st.info("Sem dados suficientes para Circunscrição.")
 
             st.write("<br>", unsafe_allow_html=True)
 
-            # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM (COLUNA AE) ---
+            # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM (SOLUÇÃO DEFINITIVA) ---
             st.markdown("### ⚖️ DISTRIBUIÇÃO DE ORCRIM")
-            if COL_ORCRIM:
-                # Limpeza de texto: tira espaços e deixa tudo em maiúsculo
-                df_filtrado[COL_ORCRIM] = df_filtrado[COL_ORCRIM].astype(str).str.strip().str.upper()
+            
+            # Pegando a coluna AE (Índice 30, pois o Python começa no 0)
+            if len(df.columns) > 30 and total_procedimentos > 0:
+                # Extrai a coluna AE bruta e converte para texto maiúsculo
+                orcrim_raw = df_filtrado.iloc[:, 30].astype(str).str.upper()
                 
-                # Vamos remover o que estiver vazio ('NAN', 'NONE', '')
-                df_orcrim = df_filtrado[~df_filtrado[COL_ORCRIM].isin(["NAN", "NONE", "", "NA"])]
+                # Função "à prova de balas" para classificar os textos bagunçados
+                def classificar_orcrim(texto):
+                    if "INVESTIGA" in texto: return "EM INVESTIGAÇÃO"
+                    if "X MIL" in texto or "VS MIL" in texto: return "TRÁFICO X MILÍCIA"
+                    if "TRÁFICO" in texto or "TRAFICO" in texto: return "TRÁFICO"
+                    if "MILÍCIA" in texto or "MILICIA" in texto: return "MILÍCIA"
+                    return "OUTROS" # Ignora células vazias ou não identificadas
+
+                # Aplica a função e cria uma nova coluna limpa
+                df_filtrado['ORCRIM_LIMPO'] = orcrim_raw.apply(classificar_orcrim)
+                
+                # Filtra apenas as 4 categorias que você pediu
+                df_orcrim = df_filtrado[df_filtrado['ORCRIM_LIMPO'] != "OUTROS"]
                 
                 if len(df_orcrim) > 0:
-                    tabela_orcrim = df_orcrim.groupby([COL_ORCRIM, 'ANO']).size().reset_index(name='TOTAL')
+                    tabela_orcrim = df_orcrim.groupby(['ORCRIM_LIMPO', 'ANO']).size().reset_index(name='TOTAL')
                     
                     grafico_orcrim = alt.Chart(tabela_orcrim).mark_bar().encode(
                         x=alt.X('TOTAL:Q', title='Ocorrências'),
-                        y=alt.Y(f'{COL_ORCRIM}:N', sort='-x', title=''),
+                        y=alt.Y('ORCRIM_LIMPO:N', sort='-x', title=''),
                         color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
-                        tooltip=[COL_ORCRIM, 'ANO', 'TOTAL']
+                        tooltip=['ORCRIM_LIMPO', 'ANO', 'TOTAL']
                     ).properties(height=300)
                     
                     st.altair_chart(grafico_orcrim, use_container_width=True)
                 else:
-                    st.info("Nenhuma classificação de ORCRIM encontrada para os anos selecionados.")
+                    st.info("Nenhuma das 4 classificações de ORCRIM foi encontrada para os filtros selecionados.")
             else:
-                st.warning("A coluna AE (índice 30) não foi encontrada na planilha exportada.")
+                st.warning("Não foi possível acessar a coluna AE ou não há dados para analisar.")
 
         else:
             st.info("POR FAVOR, SELECIONE PELO MENOS UM ANO PARA GERAR AS ANÁLISES.")
