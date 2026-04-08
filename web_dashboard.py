@@ -5,12 +5,14 @@ import altair as alt
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 
-# --- CSS PERSONALIZADO ---
+# --- CSS PERSONALIZADO (AGORA COM RESPONSIVIDADE PARA CELULAR) ---
 st.markdown("""
     <style>
+    /* Ocultar bolinhas e quadradinhos padrão */
     div[role="radiogroup"] > label > div:first-child,
     div[data-testid="stCheckbox"] > label > div:first-child { display: none; }
     
+    /* Estilo base de todos os botões */
     div[role="radiogroup"] > label,
     div[data-testid="stCheckbox"] > label {
         background-color: #1E2130; border: 1px solid #4a4f63; padding: 10px 15px;
@@ -34,7 +36,7 @@ st.markdown("""
         padding-left: 20px;
     }
 
-    /* ESPECÍFICO 2: Filtros Principais (Agora com wrap para vários botões) */
+    /* ESPECÍFICO 2: Filtros Principais (Lado a Lado no Computador) */
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
         display: flex; flex-direction: row; flex-wrap: wrap; gap: 15px; width: 100%;
     }
@@ -48,6 +50,20 @@ st.markdown("""
     }
     div[data-testid="stVerticalBlock"] > div > div[data-testid="stCheckbox"] {
         padding-bottom: 0px; margin-bottom: -10px;
+    }
+
+    /* ==========================================
+       MÁGICA PARA O CELULAR (Telas pequenas) 
+       ========================================== */
+    @media (max-width: 768px) {
+        /* Empilha os botões de filtro no celular em vez de espremer */
+        div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
+            flex-direction: column;
+            gap: 5px;
+        }
+        /* Reduz sutilmente o tamanho das fontes dos cards gigantes para não vazar a tela */
+        h1 { font-size: 38px !important; }
+        h2 { font-size: 42px !important; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -218,7 +234,7 @@ if menu == "1. VISÃO GERAL":
             anos_selecionados = []
             
             if modo_analise == "ANÁLISE INDIVIDUAL":
-                col_drop, _ = st.columns([2, 8]) 
+                col_drop, col_vazia = st.columns([2, 8]) 
                 ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis)
                 anos_selecionados = [ano_escolhido]
             else:
@@ -310,7 +326,6 @@ elif menu == "2. CASOS POR ÁREA":
         if len(anos_selecionados) > 0:
             df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
 
-            # --- O NOVO FILTRO DE ÁREA (COM BOTÕES LADO A LADO E SEM LIXO) ---
             st.write("**SELECIONE A ÁREA:**")
             COL_AREA = next((c for c in df.columns if "ÁREA" in str(c) or "AREA" in str(c)), None)
             if not COL_AREA and len(df.columns) > 18:
@@ -322,15 +337,12 @@ elif menu == "2. CASOS POR ÁREA":
 
                 df_filtrado_ano['AREA_LIMPA'] = col_area_data.apply(lambda x: str(x).strip().upper())
                 areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
-                
-                # O filtro mestre que remove os traços e itens vazios ("-", "--", etc)
                 areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT", "-", "--"]]
                 
-                # Trocado Selectbox por Radio Button (Nosso CSS transforma em botões)
                 area_selecionada = st.radio(
-                    "", # Título oculto (pois o st.write já diz o que é)
+                    "", 
                     ["TODAS AS ÁREAS"] + areas_disponiveis,
-                    horizontal=True, # Força a ficar lado a lado
+                    horizontal=True, 
                     key="radio_area_selecionada"
                 )
                 
@@ -365,45 +377,3 @@ elif menu == "4. MODO ANALÍTICO":
             st.dataframe(df_limpo)
     except Exception as e:
         st.error(f"Erro ao gerar a tabela: {e}")
-
-# --- (Lá no topo, no seu Menu Lateral, adicione a 5ª opção) ---
-# menu = st.sidebar.radio("", ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MOTIVAÇÃO / DELITO", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"])
-
-# =====================================================================
-# 6. PÁGINA: ASSISTENTE IA (NOVA)
-# =====================================================================
-elif menu == "5. ASSISTENTE IA":
-    st.header("🤖 Assistente Virtual de Análise")
-    st.markdown("Converse com a Inteligência Artificial sobre os dados do monitoramento.")
-    st.write("---")
-
-    # 1. Cria uma memória para o chat não apagar quando a tela recarregar
-    if "mensagens_chat" not in st.session_state:
-        # Mensagem inicial de boas vindas da IA
-        st.session_state.mensagens_chat = [
-            {"role": "assistant", "content": "Olá! Eu sou o seu Analista Virtual. Como posso ajudar com os dados de homicídios hoje?"}
-        ]
-
-    # 2. Exibe todo o histórico de mensagens na tela
-    for msg in st.session_state.mensagens_chat:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    # 3. A caixinha de texto onde o usuário digita
-    pergunta_usuario = st.chat_input("Pergunte algo sobre os dados...")
-
-    # 4. O que acontece quando o usuário aperta Enter:
-    if pergunta_usuario:
-        # Salva e mostra a mensagem do usuário
-        st.session_state.mensagens_chat.append({"role": "user", "content": pergunta_usuario})
-        with st.chat_message("user"):
-            st.markdown(pergunta_usuario)
-            
-        # --- AQUI ENTRARÁ O CÉREBRO DA IA NO FUTURO ---
-        # Por enquanto, uma resposta automática simulada
-        resposta_simulada = f"Você perguntou: '{pergunta_usuario}'. Em breve, minha IA estará conectada aos seus dados para responder isso com precisão!"
-        
-        # Salva e mostra a resposta da IA
-        st.session_state.mensagens_chat.append({"role": "assistant", "content": resposta_simulada})
-        with st.chat_message("assistant"):
-            st.markdown(resposta_simulada)
