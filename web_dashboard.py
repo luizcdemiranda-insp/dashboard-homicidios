@@ -8,7 +8,6 @@ st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 col_esq, col_meio, col_dir = st.columns([1, 4, 1])
 
 with col_esq:
-    # Lembre-se de usar o nome correto da imagem que você salvou na pasta
     try:
         st.image("logo1.png", width=150)
     except:
@@ -25,9 +24,10 @@ with col_dir:
 
 st.write("---")
 
-# 2. Menu Lateral Atualizado
-menu = st.sidebar.selectbox(
-    "Navegação",
+# 2. Menu Lateral Atualizado (Botões visíveis simultaneamente)
+st.sidebar.markdown("### Menu de Navegação")
+menu = st.sidebar.radio(
+    "", # Deixei o título em branco pois já tem o markdown acima
     ["1. Visão Geral (Macro)",
      "2. Casos por Área",
      "3. Motivação / Delito"]
@@ -43,7 +43,7 @@ def carregar_dados():
     if 'ANO' not in df.columns and 'DATA' in df.columns:
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     
-    # Padroniza todas as colunas para MAIÚSCULO para evitar erros de digitação (ex: Orcrim vs ORCRIM)
+    # Padroniza todas as colunas para MAIÚSCULO para evitar erros de digitação
     df.columns = [str(col).strip().upper() for col in df.columns]
     
     return df
@@ -65,12 +65,11 @@ if menu == "1. Visão Geral (Macro)":
         # Preparar os anos disponíveis
         df = df.dropna(subset=['ANO'])
         df['ANO'] = df['ANO'].astype(int).astype(str)
-        anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True) # Ordem decrescente (mais recente primeiro)
+        anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
-        # --- CONTROLES DE FILTRO (No topo da página) ---
+        # --- CONTROLES DE FILTRO ---
         st.subheader("Filtros de Análise")
         
-        # Opção Radio para escolher o tipo de análise
         modo_analise = st.radio(
             "Selecione o formato da análise:",
             ["Análise Individual (1 ano)", "Análise Comparativa (Múltiplos anos)"],
@@ -87,24 +86,18 @@ if menu == "1. Visão Geral (Macro)":
 
         st.write("---")
 
-        # Se houver ano(s) selecionado(s), prosseguimos com os gráficos
         if len(anos_selecionados) > 0:
-            # Filtramos a base inteira para deixar só os anos selecionados
             df_filtrado = df[df['ANO'].isin(anos_selecionados)]
 
-            # --- VERIFICAÇÃO DE COLUNAS ---
-            # Aqui você pode mudar o nome se na sua planilha estiver diferente!
-            COL_PROCEDIMENTO = "PROCEDIMENTO" if "PROCEDIMENTO" in df.columns else None
-            COL_DIA = "DIA DA SEMANA" if "DIA DA SEMANA" in df.columns else None
+            # --- VERIFICAÇÃO DE COLUNAS AJUSTADA ---
+            COL_DIA = "DIA SEMANA" if "DIA SEMANA" in df.columns else None
             COL_CIRCUNSCRICAO = "CIRCUNSCRIÇÃO" if "CIRCUNSCRIÇÃO" in df.columns else None
-            COL_ORCRIM = "ORCRIM" if "ORCRIM" in df.columns else "MOTIVAÇÃO" # Tenta achar ORCRIM, se não, tenta MOTIVAÇÃO
+            COL_ORCRIM = "ORCRIM" if "ORCRIM" in df.columns else None
 
-            # --- ANÁLISE 1: QUANTIDADE DE PROCEDIMENTOS (Destaque) ---
-            # Conta o número de linhas (ocorrências) filtradas
+            # --- ANÁLISE 1: QUANTIDADE DE PROCEDIMENTOS ---
             total_procedimentos = len(df_filtrado)
             st.metric(label="📊 Total de Procedimentos (Ocorrências) no período", value=f"{total_procedimentos:,}".replace(',', '.'))
             
-            # --- PREPARAÇÃO DOS GRÁFICOS (Layout em Colunas) ---
             st.write("<br>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
 
@@ -112,40 +105,55 @@ if menu == "1. Visão Geral (Macro)":
             with col1:
                 st.markdown("### 📅 Crimes por Dia da Semana")
                 if COL_DIA:
-                    # Agrupa Dia da Semana x Ano e conta as linhas
                     tabela_dia = pd.crosstab(df_filtrado[COL_DIA], df_filtrado['ANO'])
                     
-                    # Para organizar de Seg a Dom, precisaria de uma lista manual, 
-                    # mas o Streamlit já desenha bonito.
+                    # Ordena do dia com MAIS crimes para o com MENOS crimes
+                    tabela_dia['Total'] = tabela_dia.sum(axis=1)
+                    tabela_dia = tabela_dia.sort_values('Total', ascending=False).drop(columns=['Total'])
+                    
                     st.bar_chart(tabela_dia)
                 else:
-                    st.warning("Coluna 'DIA DA SEMANA' não encontrada na planilha.")
+                    st.warning("Coluna 'DIA SEMANA' não encontrada.")
 
-            # --- ANÁLISE 3: CIRCUNSCRIÇÃO ---
+            # --- ANÁLISE 3: CIRCUNSCRIÇÃO (Ordem Decrescente) ---
             with col2:
                 st.markdown("### 🗺️ Crimes por Circunscrição")
                 if COL_CIRCUNSCRICAO:
                     tabela_circ = pd.crosstab(df_filtrado[COL_CIRCUNSCRICAO], df_filtrado['ANO'])
+                    
+                    # Lógica para Ordenação Decrescente
+                    tabela_circ['Total'] = tabela_circ.sum(axis=1)
+                    tabela_circ = tabela_circ.sort_values('Total', ascending=False).drop(columns=['Total'])
+                    
                     st.bar_chart(tabela_circ)
                 else:
-                    st.warning("Coluna 'CIRCUNSCRIÇÃO' não encontrada na planilha.")
+                    st.warning("Coluna 'CIRCUNSCRIÇÃO' não encontrada.")
 
             st.write("<br>", unsafe_allow_html=True)
 
             # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM ---
-            st.markdown("### ⚖️ Distribuição de ORCRIM (Organização Criminosa / Motivação)")
-            if COL_ORCRIM in df.columns:
-                tabela_orcrim = pd.crosstab(df_filtrado[COL_ORCRIM], df_filtrado['ANO'])
-                # Gráfico de área/barras focado nas motivações
+            st.markdown("### ⚖️ Distribuição de ORCRIM")
+            if COL_ORCRIM:
+                # Padronizar o texto da coluna para agrupar certinho
+                df_filtrado.loc[:, COL_ORCRIM] = df_filtrado[COL_ORCRIM].astype(str).str.strip().str.upper()
+                
+                # Vamos remover da contagem caso haja linhas em branco preenchidas como "NAN"
+                df_orcrim = df_filtrado[df_filtrado[COL_ORCRIM] != "NAN"]
+                
+                tabela_orcrim = pd.crosstab(df_orcrim[COL_ORCRIM], df_orcrim['ANO'])
+                
+                # Ordenar de forma decrescente os tipos de ORCRIM
+                tabela_orcrim['Total'] = tabela_orcrim.sum(axis=1)
+                tabela_orcrim = tabela_orcrim.sort_values('Total', ascending=False).drop(columns=['Total'])
+                
                 st.bar_chart(tabela_orcrim)
             else:
-                st.warning(f"Coluna 'ORCRIM' ou 'MOTIVAÇÃO' não encontrada. Verifique o nome exato na planilha.")
+                st.warning("Coluna 'ORCRIM' não encontrada.")
 
         else:
             st.info("Por favor, selecione pelo menos um ano para gerar as análises.")
 
-
-# --- Outras Páginas em Construção ---
+# --- Outras Páginas ---
 elif menu == "2. Casos por Área":
     st.header("🗺️ Casos por Área de Policiamento")
     st.info("Página em construção...")
