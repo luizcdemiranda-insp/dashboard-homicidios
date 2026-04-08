@@ -4,49 +4,53 @@ import altair as alt
 
 st.set_page_config(page_title="Dashboard de Ocorrências", layout="wide")
 
-# --- CSS PERSONALIZADO (NOVO DESIGN DE BOTÕES ATIVOS E CARDS) ---
+# --- CSS PERSONALIZADO (Corrigido para separar Menu e Filtros) ---
 st.markdown("""
     <style>
-    /* Ocultar as bolinhas padrão do radio e quadradinhos do checkbox */
+    /* Ocultar bolinhas e quadradinhos padrão */
     div[role="radiogroup"] > label > div:first-child,
     div[data-testid="stCheckbox"] > label > div:first-child { display: none; }
     
-    /* Estilo base dos botões (NÃO SELECIONADOS) */
+    /* Estilo base de todos os botões */
     div[role="radiogroup"] > label,
     div[data-testid="stCheckbox"] > label {
-        background-color: #1E2130; 
-        border: 1px solid #4a4f63; 
-        padding: 10px 15px;
-        border-radius: 8px; 
-        margin-bottom: 8px; 
-        text-align: center; 
-        font-weight: bold; 
-        transition: 0.3s;
-        width: 100%; /* Força a mesma largura horizontal para todos */
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
+        background-color: #1E2130; border: 1px solid #4a4f63; padding: 10px 15px;
+        border-radius: 8px; margin-bottom: 8px; font-weight: bold; transition: 0.3s;
+        display: flex; align-items: center; cursor: pointer;
     }
     
     /* Efeito ao passar o mouse */
     div[role="radiogroup"] > label:hover,
-    div[data-testid="stCheckbox"] > label:hover { 
-        border-color: #ff4b4b; 
-    }
+    div[data-testid="stCheckbox"] > label:hover { border-color: #ff4b4b; }
     
-    /* A MÁGICA: Estilo do botão ATIVAMENTE SELECIONADO */
+    /* Efeito de Botão SELECIONADO (Ativo) */
     div[role="radiogroup"] > label:has(input:checked),
     div[data-testid="stCheckbox"] > label:has(input:checked) {
-        background-color: #ff4b4b;
-        color: white;
-        border-color: #ff4b4b;
-        box-shadow: 0 0 10px rgba(255, 75, 75, 0.3); /* Leve brilho para destacar */
+        background-color: #ff4b4b; color: white; border-color: #ff4b4b;
+        box-shadow: 0 0 10px rgba(255, 75, 75, 0.3);
     }
 
-    /* Ajuste para alinhar os botões de ano lado a lado perfeitamente */
-    div[data-testid="column"] > div > div[data-testid="stCheckbox"] > label {
+    /* ESPECÍFICO: Menu Lateral (Navegação) -> 100% largura e Alinhado à ESQUERDA */
+    section[data-testid="stSidebar"] div[role="radiogroup"] > label {
         width: 100%;
+        justify-content: flex-start;
+        padding-left: 20px;
+    }
+
+    /* ESPECÍFICO: Filtros Principais (Análise) -> Lado a Lado e Centralizados */
+    div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
+        flex-direction: row;
+        gap: 15px;
+    }
+    div[data-testid="stMainBlockContainer"] div[role="radiogroup"] > label {
+        width: 100%; /* Divide o espaçoigualmente dentro do flex-row */
+        justify-content: center;
+    }
+
+    /* ESPECÍFICO: Checkboxes dos Anos */
+    div[data-testid="stCheckbox"] > label {
+        width: 100%;
+        justify-content: center;
         margin-top: 10px;
     }
     </style>
@@ -64,7 +68,7 @@ with col_dir:
     except: st.write("")
 st.write("---")
 
-# --- MENU LATERAL (COM NOME ATUALIZADO) ---
+# --- MENU LATERAL ---
 st.sidebar.markdown("### NAVEGAÇÃO")
 menu = st.sidebar.radio(
     "", 
@@ -72,7 +76,7 @@ menu = st.sidebar.radio(
         "1. VISÃO GERAL (MACRO)", 
         "2. CASOS POR ÁREA", 
         "3. MOTIVAÇÃO / DELITO",
-        "4. MODO ANALÍTICO" # Atualizado!
+        "4. MODO ANALÍTICO"
     ]
 )
 
@@ -111,7 +115,7 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
             st.subheader("FILTROS DE ANÁLISE")
             
-            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"], horizontal=True)
+            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"])
 
             anos_selecionados = []
             
@@ -219,7 +223,7 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
                     st.write("<br>", unsafe_allow_html=True)
 
-                    # --- ANÁLISE 4: ATRIBUIÇÃO DE CRIMES (CARDS DE DESIGN) ---
+                    # --- ANÁLISE 4: ATRIBUIÇÃO DE CRIMES (CARDS NATIVOS) ---
                     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES")
                     
                     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
@@ -240,37 +244,23 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
                         df_filtrado['ORCRIM_LIMPO'] = col_orcrim_data.apply(classificar_orcrim)
                         
-                        # Contagem individual para os quadrados (Cards)
+                        # Contagens
                         tot_investiga = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'EM INVESTIGAÇÃO'])
                         tot_trafico = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'TRÁFICO'])
                         tot_milicia = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'MILÍCIA'])
                         tot_traf_mil = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'TRÁFICO X MILÍCIA'])
 
-                        # Construindo os 4 Quadrados com HTML/CSS (Cards modernos)
-                        cards_html = f"""
-                        <div style="display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap; margin-top: 10px;">
-                            <div style="flex: 1; min-width: 150px; background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
-                                <h4 style="margin: 0; color: #b0b4c4; font-size: 14px; letter-spacing: 1px;">EM INVESTIGAÇÃO</h4>
-                                <h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_investiga}</h2>
-                            </div>
-                            
-                            <div style="flex: 1; min-width: 150px; background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
-                                <h4 style="margin: 0; color: #b0b4c4; font-size: 14px; letter-spacing: 1px;">TRÁFICO</h4>
-                                <h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_trafico}</h2>
-                            </div>
-                            
-                            <div style="flex: 1; min-width: 150px; background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
-                                <h4 style="margin: 0; color: #b0b4c4; font-size: 14px; letter-spacing: 1px;">MILÍCIA</h4>
-                                <h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_milicia}</h2>
-                            </div>
-                            
-                            <div style="flex: 1; min-width: 150px; background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
-                                <h4 style="margin: 0; color: #b0b4c4; font-size: 13px; letter-spacing: 1px;">TRÁFICO X MILÍCIA</h4>
-                                <h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_traf_mil}</h2>
-                            </div>
-                        </div>
-                        """
-                        st.markdown(cards_html, unsafe_allow_html=True)
+                        # Dividindo a tela em 4 colunas nativas do Streamlit (Isso resolve o bug do código aparecendo na tela!)
+                        card1, card2, card3, card4 = st.columns(4)
+                        
+                        with card1:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
+                        with card2:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
+                        with card3:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
+                        with card4:
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
@@ -283,18 +273,14 @@ elif menu == "3. MOTIVAÇÃO / DELITO":
     st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO")
     st.info("Página em construção...")
 
-elif menu == "4. MODO ANALÍTICO": # Atualizado!
+elif menu == "4. MODO ANALÍTICO":
     st.header("🕵️‍♂️ Modo Analítico - Visualização da Planilha")
     st.write("Esta tela permite que você veja os dados brutos exatamente como o sistema está lendo da nuvem.")
     try:
         with st.spinner("Carregando tabela completa..."):
             df_raiox = carregar_dados()
-            
-            # Ocultando as colunas que contenham a palavra 'NEUTRA' no cabeçalho
             colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
             df_limpo = df_raiox[colunas_limpas]
-            
-            # Mensagem verde foi removida daqui!
             st.dataframe(df_limpo)
     except Exception as e:
         st.error(f"Erro ao gerar a tabela: {e}")
