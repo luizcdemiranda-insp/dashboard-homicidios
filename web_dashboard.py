@@ -375,7 +375,7 @@ elif menu == "5. ASSISTENTE IA":
             
             # AQUI ESTÁ A CORREÇÃO: Nome atualizado do modelo para não dar erro 404
             # Versão numérica exata (blindada contra erro 404)
-            model = genai.GenerativeModel('gemini-1.5-flash-002', system_instruction=instrucoes_sistema)
+            model = genai.GenerativeModel('gemini-1.5-flash-pro', system_instruction=instrucoes_sistema)
             
             # Cria a memória do Chat (se não existir ainda)
             if "chat_gemini" not in st.session_state:
