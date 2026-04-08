@@ -37,11 +37,10 @@ menu = st.sidebar.radio("", ["1. VISÃO GERAL (MACRO)", "2. CASOS POR ÁREA", "3
 # =====================================================================
 @st.cache_data
 def carregar_dados():
-    # Link padrão para a primeira aba
     url = "https://docs.google.com/spreadsheets/d/1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc/export?format=csv&gid=0"
     df = pd.read_csv(url)
     
-    # Padroniza os cabeçalhos forçando tudo para string para não dar erro
+    # Padroniza os cabeçalhos forçando tudo para string
     df.columns = [str(col).strip().upper() for col in df.columns]
 
     if 'ANO' not in df.columns and 'DATA' in df.columns:
@@ -63,7 +62,6 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
     if sucesso_dados:
         try:
-            # Garantir que o ANO não quebre com dados vazios
             df = df.dropna(subset=['ANO'])
             df['ANO'] = df['ANO'].astype(int).astype(str)
             anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
@@ -81,18 +79,14 @@ if menu == "1. VISÃO GERAL (MACRO)":
             if len(anos_selecionados) > 0:
                 df_filtrado_ano = df[df['ANO'].isin(anos_selecionados)].copy()
 
-                # --- FILTRO DE ÁREA (BLINDADO CONTRA CÉLULAS VAZIAS) ---
+                # --- FILTRO DE ÁREA ---
                 COL_AREA = next((c for c in df.columns if "ÁREA" in str(c) or "AREA" in str(c)), None)
                 
                 if COL_AREA:
-                    # Se houver colunas com o mesmo nome, pega só a primeira
                     col_area_data = df_filtrado_ano[COL_AREA]
-                    if isinstance(col_area_data, pd.DataFrame):
-                        col_area_data = col_area_data.iloc[:, 0]
+                    if isinstance(col_area_data, pd.DataFrame): col_area_data = col_area_data.iloc[:, 0]
 
-                    # O 'str(x)' AQUI É O QUE PREVINE O ERRO DO FLOAT!
                     df_filtrado_ano['AREA_LIMPA'] = col_area_data.apply(lambda x: str(x).strip().upper())
-                    
                     areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
                     areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT"]]
                     
@@ -104,7 +98,6 @@ if menu == "1. VISÃO GERAL (MACRO)":
                         df_filtrado = df_filtrado_ano.copy()
                 else:
                     df_filtrado = df_filtrado_ano.copy()
-                    st.warning("⚠️ Coluna de ÁREA não encontrada na aba baixada.")
 
                 st.write("---")
 
@@ -166,13 +159,10 @@ if menu == "1. VISÃO GERAL (MACRO)":
                     # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM ---
                     st.markdown("### ⚖️ DISTRIBUIÇÃO DE ORCRIM")
                     
-                    sugestoes_orcrim = [i for i, c in enumerate(df_filtrado.columns) if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
-                    indice_sugestao = sugestoes_orcrim[0] if sugestoes_orcrim else (30 if len(df_filtrado.columns) > 30 else 0)
-
                     coluna_orcrim_escolhida = st.selectbox(
-                        "Selecione a coluna que contém os dados de ORCRIM:", 
+                        "Selecione a coluna exata que contém os dados de ORCRIM:", 
                         options=df_filtrado.columns.tolist(),
-                        index=indice_sugestao
+                        key="seletor_orcrim" # Ajuda a manter a escolha salva na memória
                     )
 
                     if coluna_orcrim_escolhida:
@@ -181,7 +171,6 @@ if menu == "1. VISÃO GERAL (MACRO)":
                             col_orcrim_data = col_orcrim_data.iloc[:, 0]
                         
                         def classificar_orcrim(texto):
-                            # MÁGICA ANTI-ERRO AQUI: Converte forçadamente para String
                             texto = str(texto).strip().upper() 
                             if "INVESTIGA" in texto: return "EM INVESTIGAÇÃO"
                             if "X MIL" in texto or "VS MIL" in texto: return "TRÁFICO X MILÍCIA"
@@ -200,14 +189,16 @@ if menu == "1. VISÃO GERAL (MACRO)":
                             ).properties(height=300)
                             st.altair_chart(grafico_orcrim, use_container_width=True)
                         else:
-                            st.info("Nenhum dado de Tráfico, Milícia ou Investigação encontrado para este filtro.")
+                            st.info("Nenhum dado de Tráfico, Milícia ou Investigação encontrado para a coluna selecionada.")
+            
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
 
-        # --- MODO RAIO-X ---
+        # --- MODO RAIO-X (AGORA MOSTRA TUDO) ---
         st.write("---")
         with st.expander("🕵️‍♂️ Modo Raio-X (Ver os dados puros)"):
-            st.dataframe(df.head())
+            st.write(f"Mostrando todas as **{len(df_filtrado)}** ocorrências que passaram pelo filtro atual:")
+            st.dataframe(df_filtrado) # Removi o .head() para você ver TUDO!
 
 elif menu == "2. CASOS POR ÁREA":
     st.header("🗺️ CASOS POR ÁREA DE POLICIAMENTO")
