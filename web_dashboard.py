@@ -1,17 +1,14 @@
 import streamlit as st
 import pandas as pd
-import altair as alt # Nova ferramenta para gráficos mais precisos
+import altair as alt
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 
-# --- CSS PERSONALIZADO (Para transformar o Radio em Botões Elegantes) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    /* Esconde as bolinhas do Radio */
     div[role="radiogroup"] > label > div:first-child { display: none; }
-    
-    /* Transforma o texto em um botão estilo bloco */
     div[role="radiogroup"] > label {
         background-color: #1E2130;
         border: 1px solid #4a4f63;
@@ -22,8 +19,6 @@ st.markdown("""
         font-weight: bold;
         transition: 0.3s;
     }
-    
-    /* Efeito de passar o mouse */
     div[role="radiogroup"] > label:hover {
         background-color: #ff4b4b;
         color: white;
@@ -32,7 +27,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- CABEÇALHO COM LOGOMARCAS ---
+# --- CABEÇALHO ---
 col_esq, col_meio, col_dir = st.columns([1, 4, 1])
 
 with col_esq:
@@ -52,7 +47,7 @@ with col_dir:
 
 st.write("---")
 
-# 2. Menu Lateral (Agora esteticamente como botões e em CAIXA ALTA)
+# 2. Menu Lateral
 st.sidebar.markdown("### NAVEGAÇÃO")
 menu = st.sidebar.radio(
     "", 
@@ -67,11 +62,10 @@ def carregar_dados():
     url = "https://docs.google.com/spreadsheets/d/1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc/export?format=csv&gid=0"
     df = pd.read_csv(url)
     
-    # Detetive de Datas
     if 'ANO' not in df.columns and 'DATA' in df.columns:
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     
-    # Padroniza todas as colunas para MAIÚSCULO
+    # Padroniza todas as colunas do cabeçalho para MAIÚSCULO
     df.columns = [str(col).strip().upper() for col in df.columns]
     return df
 
@@ -93,7 +87,6 @@ if menu == "1. VISÃO GERAL (MACRO)":
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
-        # --- CONTROLES DE FILTRO ---
         st.subheader("FILTROS DE ANÁLISE")
         
         modo_analise = st.radio(
@@ -113,37 +106,37 @@ if menu == "1. VISÃO GERAL (MACRO)":
         st.write("---")
 
         if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)]
+            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
 
-            # --- O NOVO DETETIVE IMPLACÁVEL ---
-            # Ele procura "pedaços" da palavra na coluna, ignorando espaços extras
+            # --- BUSCA DE COLUNAS ---
             COL_DIA = next((c for c in df.columns if "DIA" in c and "SEMANA" in c), None)
             COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in c), None)
-            COL_ORCRIM = next((c for c in df.columns if "ORCRIM" in c), None)
+            
+            # O SEGREDO DA COLUNA AE: Pegamos a coluna pelo índice exato (30 = AE)
+            # Se a planilha tiver menos que 31 colunas, o código não quebra, ele apenas avisa.
+            if len(df.columns) >= 31:
+                COL_ORCRIM = df.columns[30] 
+            else:
+                COL_ORCRIM = None
 
             # --- ANÁLISE 1: QUANTIDADE DE PROCEDIMENTOS ---
             total_procedimentos = len(df_filtrado)
             st.metric(label="📊 TOTAL DE PROCEDIMENTOS (OCORRÊNCIAS) NO PERÍODO", value=f"{total_procedimentos:,}".replace(',', '.'))
             st.write("<br>", unsafe_allow_html=True)
             
-            # Divide a tela em duas colunas para os gráficos
             col1, col2 = st.columns(2)
 
             # --- ANÁLISE 2: DIA DA SEMANA ---
             with col1:
                 st.markdown("### 📅 CRIMES POR DIA DA SEMANA")
                 if COL_DIA:
-                    # Conta os casos
                     tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
-                    
-                    # Gráfico Altair para forçar ordem de barras
                     grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(
                         x=alt.X('TOTAL:Q', title='Ocorrências'),
-                        y=alt.Y(f'{COL_DIA}:N', sort='-x', title=''), # sort='-x' garante do maior pro menor
+                        y=alt.Y(f'{COL_DIA}:N', sort='-x', title=''),
                         color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
                         tooltip=[COL_DIA, 'ANO', 'TOTAL']
                     ).properties(height=350)
-                    
                     st.altair_chart(grafico_dia, use_container_width=True)
                 else:
                     st.warning("Coluna de Dia da Semana não encontrada.")
@@ -153,43 +146,42 @@ if menu == "1. VISÃO GERAL (MACRO)":
                 st.markdown("### 🗺️ CRIMES POR CIRCUNSCRIÇÃO")
                 if COL_CIRCUNSCRICAO:
                     tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
-                    
-                    # Gráfico Altair com ordem rigorosa
                     grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(
                         x=alt.X('TOTAL:Q', title='Ocorrências'),
                         y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x', title=''),
                         color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
                         tooltip=[COL_CIRCUNSCRICAO, 'ANO', 'TOTAL']
                     ).properties(height=350)
-                    
                     st.altair_chart(grafico_circ, use_container_width=True)
                 else:
                     st.warning("Coluna de Circunscrição não encontrada.")
 
             st.write("<br>", unsafe_allow_html=True)
 
-            # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM ---
+            # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM (COLUNA AE) ---
             st.markdown("### ⚖️ DISTRIBUIÇÃO DE ORCRIM")
             if COL_ORCRIM:
-                # Limpeza rigorosa do texto para padronizar EM INVESTIGAÇÃO, TRÁFICO, etc.
-                df_filtrado = df_filtrado.copy()
+                # Limpeza de texto: tira espaços e deixa tudo em maiúsculo
                 df_filtrado[COL_ORCRIM] = df_filtrado[COL_ORCRIM].astype(str).str.strip().str.upper()
                 
-                # Exclui linhas vazias identificadas como "NAN"
-                df_orcrim = df_filtrado[df_filtrado[COL_ORCRIM] != "NAN"]
+                # Vamos remover o que estiver vazio ('NAN', 'NONE', '')
+                df_orcrim = df_filtrado[~df_filtrado[COL_ORCRIM].isin(["NAN", "NONE", "", "NA"])]
                 
-                tabela_orcrim = df_orcrim.groupby([COL_ORCRIM, 'ANO']).size().reset_index(name='TOTAL')
-                
-                grafico_orcrim = alt.Chart(tabela_orcrim).mark_bar().encode(
-                    x=alt.X('TOTAL:Q', title='Ocorrências'),
-                    y=alt.Y(f'{COL_ORCRIM}:N', sort='-x', title=''),
-                    color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
-                    tooltip=[COL_ORCRIM, 'ANO', 'TOTAL']
-                ).properties(height=300)
-                
-                st.altair_chart(grafico_orcrim, use_container_width=True)
+                if len(df_orcrim) > 0:
+                    tabela_orcrim = df_orcrim.groupby([COL_ORCRIM, 'ANO']).size().reset_index(name='TOTAL')
+                    
+                    grafico_orcrim = alt.Chart(tabela_orcrim).mark_bar().encode(
+                        x=alt.X('TOTAL:Q', title='Ocorrências'),
+                        y=alt.Y(f'{COL_ORCRIM}:N', sort='-x', title=''),
+                        color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
+                        tooltip=[COL_ORCRIM, 'ANO', 'TOTAL']
+                    ).properties(height=300)
+                    
+                    st.altair_chart(grafico_orcrim, use_container_width=True)
+                else:
+                    st.info("Nenhuma classificação de ORCRIM encontrada para os anos selecionados.")
             else:
-                st.warning("Coluna ORCRIM não encontrada.")
+                st.warning("A coluna AE (índice 30) não foi encontrada na planilha exportada.")
 
         else:
             st.info("POR FAVOR, SELECIONE PELO MENOS UM ANO PARA GERAR AS ANÁLISES.")
