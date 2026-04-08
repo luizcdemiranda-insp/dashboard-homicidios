@@ -2,17 +2,18 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 
+# --- IMPORTANTE: Nova biblioteca da Inteligência Artificial ---
+import google.generativeai as genai 
+
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 
-# --- CSS PERSONALIZADO (AGORA COM RESPONSIVIDADE PARA CELULAR) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    /* Ocultar bolinhas e quadradinhos padrão */
     div[role="radiogroup"] > label > div:first-child,
     div[data-testid="stCheckbox"] > label > div:first-child { display: none; }
     
-    /* Estilo base de todos os botões */
     div[role="radiogroup"] > label,
     div[data-testid="stCheckbox"] > label {
         background-color: #1E2130; border: 1px solid #4a4f63; padding: 10px 15px;
@@ -30,13 +31,10 @@ st.markdown("""
         box-shadow: 0 0 10px rgba(255, 75, 75, 0.3);
     }
 
-    /* ESPECÍFICO 1: Menu Lateral */
     section[data-testid="stSidebar"] div[role="radiogroup"] > label {
-        justify-content: flex-start;
-        padding-left: 20px;
+        justify-content: flex-start; padding-left: 20px;
     }
 
-    /* ESPECÍFICO 2: Filtros Principais (Lado a Lado no Computador) */
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
         display: flex; flex-direction: row; flex-wrap: wrap; gap: 15px; width: 100%;
     }
@@ -44,7 +42,6 @@ st.markdown("""
         flex: 1; min-width: 150px; margin: 0; padding: 12px;
     }
 
-    /* ESPECÍFICO 3: Checkboxes dos Anos */
     div[data-testid="stCheckbox"] > label {
         padding: 6px 0px; font-size: 14px; margin: 0;
     }
@@ -52,16 +49,8 @@ st.markdown("""
         padding-bottom: 0px; margin-bottom: -10px;
     }
 
-    /* ==========================================
-       MÁGICA PARA O CELULAR (Telas pequenas) 
-       ========================================== */
     @media (max-width: 768px) {
-        /* Empilha os botões de filtro no celular em vez de espremer */
-        div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
-            flex-direction: column;
-            gap: 5px;
-        }
-        /* Reduz sutilmente o tamanho das fontes dos cards gigantes para não vazar a tela */
+        div[data-testid="stMainBlockContainer"] div[role="radiogroup"] { flex-direction: column; gap: 5px; }
         h1 { font-size: 38px !important; }
         h2 { font-size: 42px !important; }
     }
@@ -80,7 +69,7 @@ with col_dir:
     except: st.write("")
 st.write("---")
 
-# 2. Menu Lateral
+# 2. Menu Lateral (Com a nova página de IA)
 st.sidebar.markdown("### NAVEGAÇÃO")
 menu = st.sidebar.radio(
     "", 
@@ -88,7 +77,8 @@ menu = st.sidebar.radio(
         "1. VISÃO GERAL", 
         "2. CASOS POR ÁREA", 
         "3. MOTIVAÇÃO / DELITO",
-        "4. MODO ANALÍTICO"
+        "4. MODO ANALÍTICO",
+        "5. ASSISTENTE IA" # Nova página integrada!
     ]
 )
 
@@ -206,6 +196,7 @@ def gerar_dashboard(df_filtrado):
         with card4:
             st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
 
+
 # =====================================================================
 # 4. PÁGINA: VISÃO GERAL (SÓ ANO)
 # =====================================================================
@@ -225,14 +216,9 @@ if menu == "1. VISÃO GERAL":
             anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
             st.subheader("FILTROS DE ANÁLISE")
-            
-            modo_analise = st.radio(
-                "SELECIONE O FORMATO DA ANÁLISE:", 
-                ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"]
-            )
+            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"])
 
             anos_selecionados = []
-            
             if modo_analise == "ANÁLISE INDIVIDUAL":
                 col_drop, col_vazia = st.columns([2, 8]) 
                 ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis)
@@ -289,15 +275,9 @@ elif menu == "2. CASOS POR ÁREA":
         anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
         st.subheader("FILTROS DE ANÁLISE")
-        
-        modo_analise = st.radio(
-            "SELECIONE O FORMATO DA ANÁLISE:", 
-            ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"],
-            key="modo_analise_area"
-        )
+        modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_analise_area")
 
         anos_selecionados = []
-        
         if modo_analise == "ANÁLISE INDIVIDUAL":
             col_drop, _ = st.columns([2, 8]) 
             ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis, key="ano_ind_area")
@@ -339,12 +319,7 @@ elif menu == "2. CASOS POR ÁREA":
                 areas_disponiveis = sorted(df_filtrado_ano['AREA_LIMPA'].unique().tolist())
                 areas_disponiveis = [a for a in areas_disponiveis if a not in ["", "NAN", "NONE", "NAT", "-", "--"]]
                 
-                area_selecionada = st.radio(
-                    "", 
-                    ["TODAS AS ÁREAS"] + areas_disponiveis,
-                    horizontal=True, 
-                    key="radio_area_selecionada"
-                )
+                area_selecionada = st.radio("", ["TODAS AS ÁREAS"] + areas_disponiveis, horizontal=True, key="radio_area_selecionada")
                 
                 if area_selecionada != "TODAS AS ÁREAS":
                     df_filtrado = df_filtrado_ano[df_filtrado_ano['AREA_LIMPA'] == area_selecionada].copy()
@@ -354,7 +329,6 @@ elif menu == "2. CASOS POR ÁREA":
                 df_filtrado = df_filtrado_ano.copy()
 
             st.write("---")
-            
             if df_filtrado.empty:
                 st.warning(f"Nenhuma ocorrência encontrada na área selecionada para os anos informados.")
             else:
@@ -370,10 +344,69 @@ elif menu == "4. MODO ANALÍTICO":
     try:
         with st.spinner("Carregando tabela completa..."):
             df_raiox = carregar_dados()
-            
             colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
             df_limpo = df_raiox[colunas_limpas]
-            
             st.dataframe(df_limpo)
     except Exception as e:
         st.error(f"Erro ao gerar a tabela: {e}")
+
+# =====================================================================
+# 6. PÁGINA: ASSISTENTE IA (NOVA & REAL)
+# =====================================================================
+elif menu == "5. ASSISTENTE IA":
+    st.header("🤖 Analista Criminal Virtual")
+    st.markdown("Converse com a Inteligência Artificial. Ela conhece os padrões, leis criminais e a estrutura do seu banco de dados.")
+    
+    # Campo para colocar a Chave na barra lateral
+    api_key_usuario = st.sidebar.text_input("🔑 Sua Chave API do Gemini:", type="password", help="Pegue gratuitamente em aistudio.google.com")
+    
+    st.write("---")
+
+    if not api_key_usuario:
+        st.warning("👈 Insira sua chave de API do Google Gemini no menu lateral para ativar o Analista.")
+        st.info("**Como pegar a chave grátis:**\n1. Acesse [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. Faça login e clique em 'Create API Key'\n3. Copie o código e cole no campo lateral.")
+    else:
+        try:
+            # Configura a Inteligência Artificial
+            genai.configure(api_key=api_key_usuario)
+            
+            # Prepara a IA para saber quem ela é e o que está analisando
+            df_contexto = carregar_dados()
+            instrucoes_sistema = f"Você é um especialista em análise criminal, inteligência policial e ciência de dados. Você está operando dentro de um Dashboard de Monitoramento de Homicídios. O banco de dados atual possui {len(df_contexto)} registros. As colunas disponíveis são: {', '.join(df_contexto.columns)}. Ajude o usuário a cruzar dados, entender métodos de investigação e analisar cenários de ORCRIM (Tráfico/Milícia)."
+            
+            # Inicializa o cérebro
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=instrucoes_sistema)
+            
+            # Cria a memória do Chat (se não existir ainda)
+            if "chat_gemini" not in st.session_state:
+                st.session_state.chat_gemini = model.start_chat(history=[])
+                # Saudação inicial fictícia
+                st.session_state.mensagens_front = [{"role": "model", "content": f"Sistemas conectados. Analisei sua planilha e encontrei **{len(df_contexto)} ocorrências**. Como posso ajudar na investigação hoje?"}]
+            
+            # Mostra o histórico na tela
+            for msg in st.session_state.mensagens_front:
+                # model no gemini = assistant no streamlit
+                role_tela = "assistant" if msg["role"] == "model" else "user" 
+                with st.chat_message(role_tela):
+                    st.markdown(msg["content"])
+
+            # A caixinha onde você digita a pergunta
+            pergunta = st.chat_input("Pergunte algo ao Analista Virtual...")
+            
+            if pergunta:
+                # Mostra a sua pergunta na tela
+                with st.chat_message("user"):
+                    st.markdown(pergunta)
+                st.session_state.mensagens_front.append({"role": "user", "content": pergunta})
+                
+                # Manda a pergunta pra IA e recebe a resposta com um loading girando
+                with st.spinner("Analisando padrões..."):
+                    resposta_ia = st.session_state.chat_gemini.send_message(pergunta)
+                
+                # Mostra a resposta da IA na tela
+                with st.chat_message("assistant"):
+                    st.markdown(resposta_ia.text)
+                st.session_state.mensagens_front.append({"role": "model", "content": resposta_ia.text})
+                
+        except Exception as e:
+            st.error(f"Erro na conexão com a IA. Verifique se a sua Chave API está correta. Detalhe técnico: {e}")
