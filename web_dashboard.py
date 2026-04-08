@@ -374,7 +374,8 @@ elif menu == "5. ASSISTENTE IA":
             instrucoes_sistema = f"Você é um especialista em análise criminal, inteligência policial e ciência de dados. Você está operando dentro de um Dashboard de Monitoramento de Homicídios. O banco de dados atual possui {len(df_contexto)} registros. As colunas disponíveis são: {', '.join(df_contexto.columns)}. Ajude o usuário a cruzar dados, entender métodos de investigação e analisar cenários de ORCRIM."
             
             # AQUI ESTÁ A CORREÇÃO: Nome atualizado do modelo para não dar erro 404
-            model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=instrucoes_sistema)
+            # Versão numérica exata (blindada contra erro 404)
+model = genai.GenerativeModel('gemini-1.5-flash-002', system_instruction=instrucoes_sistema)
             
             # Cria a memória do Chat (se não existir ainda)
             if "chat_gemini" not in st.session_state:
