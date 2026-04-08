@@ -1,8 +1,36 @@
 import streamlit as st
 import pandas as pd
+import altair as alt # Nova ferramenta para gráficos mais precisos
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
+
+# --- CSS PERSONALIZADO (Para transformar o Radio em Botões Elegantes) ---
+st.markdown("""
+    <style>
+    /* Esconde as bolinhas do Radio */
+    div[role="radiogroup"] > label > div:first-child { display: none; }
+    
+    /* Transforma o texto em um botão estilo bloco */
+    div[role="radiogroup"] > label {
+        background-color: #1E2130;
+        border: 1px solid #4a4f63;
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        text-align: center;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    
+    /* Efeito de passar o mouse */
+    div[role="radiogroup"] > label:hover {
+        background-color: #ff4b4b;
+        color: white;
+        border-color: #ff4b4b;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- CABEÇALHO COM LOGOMARCAS ---
 col_esq, col_meio, col_dir = st.columns([1, 4, 1])
@@ -11,26 +39,26 @@ with col_esq:
     try:
         st.image("logo1.png", width=150)
     except:
-        st.write("Logo 1")
+        st.write("")
 
 with col_meio:
-    st.markdown("<h1 style='text-align: center;'>🛡️ Visão Geral de Monitoramento</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🛡️ VISÃO GERAL DE MONITORAMENTO</h1>", unsafe_allow_html=True)
 
 with col_dir:
     try:
         st.image("logo2.png", width=150)
     except:
-        st.write("Logo 2")
+        st.write("")
 
 st.write("---")
 
-# 2. Menu Lateral Atualizado (Botões visíveis simultaneamente)
-st.sidebar.markdown("### Menu de Navegação")
+# 2. Menu Lateral (Agora esteticamente como botões e em CAIXA ALTA)
+st.sidebar.markdown("### NAVEGAÇÃO")
 menu = st.sidebar.radio(
-    "", # Deixei o título em branco pois já tem o markdown acima
-    ["1. Visão Geral (Macro)",
-     "2. Casos por Área",
-     "3. Motivação / Delito"]
+    "", 
+    ["1. VISÃO GERAL (MACRO)",
+     "2. CASOS POR ÁREA",
+     "3. MOTIVAÇÃO / DELITO"]
 )
 
 # 3. Função de Carga de Dados
@@ -43,15 +71,14 @@ def carregar_dados():
     if 'ANO' not in df.columns and 'DATA' in df.columns:
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     
-    # Padroniza todas as colunas para MAIÚSCULO para evitar erros de digitação
+    # Padroniza todas as colunas para MAIÚSCULO
     df.columns = [str(col).strip().upper() for col in df.columns]
-    
     return df
 
 # =====================================================================
 # 4. PÁGINA: VISÃO GERAL (MACRO)
 # =====================================================================
-if menu == "1. Visão Geral (Macro)":
+if menu == "1. VISÃO GERAL (MACRO)":
     
     with st.spinner("Sincronizando banco de dados..."):
         try:
@@ -62,102 +89,116 @@ if menu == "1. Visão Geral (Macro)":
             sucesso_dados = False
 
     if sucesso_dados:
-        # Preparar os anos disponíveis
         df = df.dropna(subset=['ANO'])
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
         # --- CONTROLES DE FILTRO ---
-        st.subheader("Filtros de Análise")
+        st.subheader("FILTROS DE ANÁLISE")
         
         modo_analise = st.radio(
-            "Selecione o formato da análise:",
-            ["Análise Individual (1 ano)", "Análise Comparativa (Múltiplos anos)"],
+            "SELECIONE O FORMATO DA ANÁLISE:",
+            ["ANÁLISE INDIVIDUAL (1 ANO)", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"],
             horizontal=True
         )
 
         anos_selecionados = []
 
-        if modo_analise == "Análise Individual (1 ano)":
-            ano_escolhido = st.selectbox("Selecione o Ano:", anos_disponiveis)
+        if modo_analise == "ANÁLISE INDIVIDUAL (1 ANO)":
+            ano_escolhido = st.selectbox("SELECIONE O ANO:", anos_disponiveis)
             anos_selecionados = [ano_escolhido]
         else:
-            anos_selecionados = st.multiselect("Selecione os Anos para comparar:", anos_disponiveis, default=anos_disponiveis[:2])
+            anos_selecionados = st.multiselect("SELECIONE OS ANOS PARA COMPARAR:", anos_disponiveis, default=anos_disponiveis[:2])
 
         st.write("---")
 
         if len(anos_selecionados) > 0:
             df_filtrado = df[df['ANO'].isin(anos_selecionados)]
 
-            # --- VERIFICAÇÃO DE COLUNAS AJUSTADA ---
-            COL_DIA = "DIA SEMANA" if "DIA SEMANA" in df.columns else None
-            COL_CIRCUNSCRICAO = "CIRCUNSCRIÇÃO" if "CIRCUNSCRIÇÃO" in df.columns else None
-            COL_ORCRIM = "ORCRIM" if "ORCRIM" in df.columns else None
+            # --- O NOVO DETETIVE IMPLACÁVEL ---
+            # Ele procura "pedaços" da palavra na coluna, ignorando espaços extras
+            COL_DIA = next((c for c in df.columns if "DIA" in c and "SEMANA" in c), None)
+            COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in c), None)
+            COL_ORCRIM = next((c for c in df.columns if "ORCRIM" in c), None)
 
             # --- ANÁLISE 1: QUANTIDADE DE PROCEDIMENTOS ---
             total_procedimentos = len(df_filtrado)
-            st.metric(label="📊 Total de Procedimentos (Ocorrências) no período", value=f"{total_procedimentos:,}".replace(',', '.'))
-            
+            st.metric(label="📊 TOTAL DE PROCEDIMENTOS (OCORRÊNCIAS) NO PERÍODO", value=f"{total_procedimentos:,}".replace(',', '.'))
             st.write("<br>", unsafe_allow_html=True)
+            
+            # Divide a tela em duas colunas para os gráficos
             col1, col2 = st.columns(2)
 
             # --- ANÁLISE 2: DIA DA SEMANA ---
             with col1:
-                st.markdown("### 📅 Crimes por Dia da Semana")
+                st.markdown("### 📅 CRIMES POR DIA DA SEMANA")
                 if COL_DIA:
-                    tabela_dia = pd.crosstab(df_filtrado[COL_DIA], df_filtrado['ANO'])
+                    # Conta os casos
+                    tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
                     
-                    # Ordena do dia com MAIS crimes para o com MENOS crimes
-                    tabela_dia['Total'] = tabela_dia.sum(axis=1)
-                    tabela_dia = tabela_dia.sort_values('Total', ascending=False).drop(columns=['Total'])
+                    # Gráfico Altair para forçar ordem de barras
+                    grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(
+                        x=alt.X('TOTAL:Q', title='Ocorrências'),
+                        y=alt.Y(f'{COL_DIA}:N', sort='-x', title=''), # sort='-x' garante do maior pro menor
+                        color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
+                        tooltip=[COL_DIA, 'ANO', 'TOTAL']
+                    ).properties(height=350)
                     
-                    st.bar_chart(tabela_dia)
+                    st.altair_chart(grafico_dia, use_container_width=True)
                 else:
-                    st.warning("Coluna 'DIA SEMANA' não encontrada.")
+                    st.warning("Coluna de Dia da Semana não encontrada.")
 
-            # --- ANÁLISE 3: CIRCUNSCRIÇÃO (Ordem Decrescente) ---
+            # --- ANÁLISE 3: CIRCUNSCRIÇÃO ---
             with col2:
-                st.markdown("### 🗺️ Crimes por Circunscrição")
+                st.markdown("### 🗺️ CRIMES POR CIRCUNSCRIÇÃO")
                 if COL_CIRCUNSCRICAO:
-                    tabela_circ = pd.crosstab(df_filtrado[COL_CIRCUNSCRICAO], df_filtrado['ANO'])
+                    tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
                     
-                    # Lógica para Ordenação Decrescente
-                    tabela_circ['Total'] = tabela_circ.sum(axis=1)
-                    tabela_circ = tabela_circ.sort_values('Total', ascending=False).drop(columns=['Total'])
+                    # Gráfico Altair com ordem rigorosa
+                    grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(
+                        x=alt.X('TOTAL:Q', title='Ocorrências'),
+                        y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x', title=''),
+                        color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
+                        tooltip=[COL_CIRCUNSCRICAO, 'ANO', 'TOTAL']
+                    ).properties(height=350)
                     
-                    st.bar_chart(tabela_circ)
+                    st.altair_chart(grafico_circ, use_container_width=True)
                 else:
-                    st.warning("Coluna 'CIRCUNSCRIÇÃO' não encontrada.")
+                    st.warning("Coluna de Circunscrição não encontrada.")
 
             st.write("<br>", unsafe_allow_html=True)
 
             # --- ANÁLISE 4: DISTRIBUIÇÃO DAS ORCRIM ---
-            st.markdown("### ⚖️ Distribuição de ORCRIM")
+            st.markdown("### ⚖️ DISTRIBUIÇÃO DE ORCRIM")
             if COL_ORCRIM:
-                # Padronizar o texto da coluna para agrupar certinho
-                df_filtrado.loc[:, COL_ORCRIM] = df_filtrado[COL_ORCRIM].astype(str).str.strip().str.upper()
+                # Limpeza rigorosa do texto para padronizar EM INVESTIGAÇÃO, TRÁFICO, etc.
+                df_filtrado = df_filtrado.copy()
+                df_filtrado[COL_ORCRIM] = df_filtrado[COL_ORCRIM].astype(str).str.strip().str.upper()
                 
-                # Vamos remover da contagem caso haja linhas em branco preenchidas como "NAN"
+                # Exclui linhas vazias identificadas como "NAN"
                 df_orcrim = df_filtrado[df_filtrado[COL_ORCRIM] != "NAN"]
                 
-                tabela_orcrim = pd.crosstab(df_orcrim[COL_ORCRIM], df_orcrim['ANO'])
+                tabela_orcrim = df_orcrim.groupby([COL_ORCRIM, 'ANO']).size().reset_index(name='TOTAL')
                 
-                # Ordenar de forma decrescente os tipos de ORCRIM
-                tabela_orcrim['Total'] = tabela_orcrim.sum(axis=1)
-                tabela_orcrim = tabela_orcrim.sort_values('Total', ascending=False).drop(columns=['Total'])
+                grafico_orcrim = alt.Chart(tabela_orcrim).mark_bar().encode(
+                    x=alt.X('TOTAL:Q', title='Ocorrências'),
+                    y=alt.Y(f'{COL_ORCRIM}:N', sort='-x', title=''),
+                    color=alt.Color('ANO:N', legend=alt.Legend(title="Ano")),
+                    tooltip=[COL_ORCRIM, 'ANO', 'TOTAL']
+                ).properties(height=300)
                 
-                st.bar_chart(tabela_orcrim)
+                st.altair_chart(grafico_orcrim, use_container_width=True)
             else:
-                st.warning("Coluna 'ORCRIM' não encontrada.")
+                st.warning("Coluna ORCRIM não encontrada.")
 
         else:
-            st.info("Por favor, selecione pelo menos um ano para gerar as análises.")
+            st.info("POR FAVOR, SELECIONE PELO MENOS UM ANO PARA GERAR AS ANÁLISES.")
 
 # --- Outras Páginas ---
-elif menu == "2. Casos por Área":
-    st.header("🗺️ Casos por Área de Policiamento")
+elif menu == "2. CASOS POR ÁREA":
+    st.header("🗺️ CASOS POR ÁREA DE POLICIAMENTO")
     st.info("Página em construção...")
 
-elif menu == "3. Motivação / Delito":
-    st.header("🔍 Detalhamento de Motivação")
+elif menu == "3. MOTIVAÇÃO / DELITO":
+    st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO")
     st.info("Página em construção...")
