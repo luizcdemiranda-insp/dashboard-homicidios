@@ -4,7 +4,7 @@ import altair as alt
 
 st.set_page_config(page_title="Dashboard de Ocorrências", layout="wide")
 
-# --- CSS PERSONALIZADO (Corrigido para separar Menu e Filtros) ---
+# --- CSS PERSONALIZADO (Ajustado para alinhamentos perfeitos) ---
 st.markdown("""
     <style>
     /* Ocultar bolinhas e quadradinhos padrão */
@@ -14,9 +14,10 @@ st.markdown("""
     /* Estilo base de todos os botões */
     div[role="radiogroup"] > label,
     div[data-testid="stCheckbox"] > label {
-        background-color: #1E2130; border: 1px solid #4a4f63; padding: 10px 15px;
-        border-radius: 8px; margin-bottom: 8px; font-weight: bold; transition: 0.3s;
-        display: flex; align-items: center; cursor: pointer;
+        background-color: #1E2130; border: 1px solid #4a4f63; 
+        border-radius: 8px; font-weight: bold; transition: 0.3s;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+        margin: 0;
     }
     
     /* Efeito ao passar o mouse */
@@ -30,28 +31,29 @@ st.markdown("""
         box-shadow: 0 0 10px rgba(255, 75, 75, 0.3);
     }
 
-    /* ESPECÍFICO: Menu Lateral (Navegação) -> 100% largura e Alinhado à ESQUERDA */
+    /* --- ESPECÍFICO 1: Menu Lateral (Empilhado e à Esquerda) --- */
+    section[data-testid="stSidebar"] div[role="radiogroup"] {
+        display: flex; flex-direction: column; gap: 8px;
+    }
     section[data-testid="stSidebar"] div[role="radiogroup"] > label {
-        width: 100%;
-        justify-content: flex-start;
-        padding-left: 20px;
+        width: 100%; justify-content: flex-start; padding: 10px 15px; padding-left: 20px;
     }
 
-    /* ESPECÍFICO: Filtros Principais (Análise) -> Lado a Lado e Centralizados */
+    /* --- ESPECÍFICO 2: Filtros Principais (Lado a Lado / 50% pra cada) --- */
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
-        flex-direction: row;
-        gap: 15px;
+        display: flex; flex-direction: row; gap: 15px; width: 100%;
     }
     div[data-testid="stMainBlockContainer"] div[role="radiogroup"] > label {
-        width: 100%; /* Divide o espaçoigualmente dentro do flex-row */
-        justify-content: center;
+        flex: 1; padding: 12px;
     }
 
-    /* ESPECÍFICO: Checkboxes dos Anos */
+    /* --- ESPECÍFICO 3: Checkboxes dos Anos (Coladinhos) --- */
     div[data-testid="stCheckbox"] > label {
-        width: 100%;
-        justify-content: center;
-        margin-top: 10px;
+        width: 100%; padding: 6px 0px; font-size: 14px;
+    }
+    /* Reduz espaço vertical extra criado pelo Streamlit nos checkboxes */
+    div[data-testid="stVerticalBlock"] > div > div[data-testid="stCheckbox"] {
+        padding-bottom: 0px; margin-bottom: -10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -115,7 +117,8 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
             st.subheader("FILTROS DE ANÁLISE")
             
-            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA (MÚLTIPLOS ANOS)"])
+            # Títulos ajustados (removido o múltiplos anos)
+            modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"])
 
             anos_selecionados = []
             
@@ -138,7 +141,8 @@ if menu == "1. VISÃO GERAL (MACRO)":
                 b1.button("✓ Todos os anos", on_click=selecionar_todos)
                 b2.button("✗ Limpar seleção", on_click=limpar_selecao)
                 
-                colunas_anos = st.columns(min(len(anos_disponiveis), 6) or 1)
+                # Aumentei para 8 colunas e adicionei gap="small" para aproximar os botões
+                colunas_anos = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
                 for i, ano in enumerate(anos_disponiveis):
                     colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_{ano}")
                 
@@ -174,14 +178,12 @@ if menu == "1. VISÃO GERAL (MACRO)":
                     COL_DIA = next((c for c in df.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
                     COL_CIRCUNSCRICAO = next((c for c in df.columns if "CIRCUNSCRI" in str(c)), None)
 
-                    # --- ANÁLISE 1: PROCEDIMENTOS ---
                     total_procedimentos = len(df_filtrado)
                     st.metric(label="📊 TOTAL DE PROCEDIMENTOS (OCORRÊNCIAS)", value=f"{total_procedimentos:,}".replace(',', '.'))
                     st.write("<br>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
 
-                    # --- ANÁLISE 2: DIA DA SEMANA ---
                     with col1:
                         st.markdown("### 📅 CRIMES POR DIA DA SEMANA")
                         if COL_DIA:
@@ -201,7 +203,6 @@ if menu == "1. VISÃO GERAL (MACRO)":
                             else: st.info("Sem dados válidos para Dia da Semana.")
                         else: st.info("Coluna não encontrada.")
 
-                    # --- ANÁLISE 3: CIRCUNSCRIÇÃO ---
                     with col2:
                         st.markdown("### 🗺️ CRIMES POR CIRCUNSCRIÇÃO")
                         if COL_CIRCUNSCRICAO:
@@ -223,7 +224,7 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
                     st.write("<br>", unsafe_allow_html=True)
 
-                    # --- ANÁLISE 4: ATRIBUIÇÃO DE CRIMES (CARDS NATIVOS) ---
+                    # --- ANÁLISE 4: ATRIBUIÇÃO DE CRIMES (CARDS COM FONTE GIGANTE) ---
                     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES")
                     
                     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
@@ -244,23 +245,22 @@ if menu == "1. VISÃO GERAL (MACRO)":
 
                         df_filtrado['ORCRIM_LIMPO'] = col_orcrim_data.apply(classificar_orcrim)
                         
-                        # Contagens
                         tot_investiga = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'EM INVESTIGAÇÃO'])
                         tot_trafico = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'TRÁFICO'])
                         tot_milicia = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'MILÍCIA'])
                         tot_traf_mil = len(df_filtrado[df_filtrado['ORCRIM_LIMPO'] == 'TRÁFICO X MILÍCIA'])
 
-                        # Dividindo a tela em 4 colunas nativas do Streamlit (Isso resolve o bug do código aparecendo na tela!)
                         card1, card2, card3, card4 = st.columns(4)
                         
+                        # Fonte aumentada para 54px e ajustada para preencher bem o Card
                         with card1:
-                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
                         with card2:
-                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
                         with card3:
-                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
                         with card4:
-                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2);"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 10px 0 0 0; color: white; font-size: 32px;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"Erro ao processar os gráficos. Detalhe técnico: {e}")
