@@ -351,58 +351,67 @@ elif menu == "4. MODO ANALÍTICO":
         st.error(f"Erro ao gerar a tabela: {e}")
 
 # =====================================================================
-# 6. PÁGINA: ASSISTENTE IA (NOVA & REAL)
+# 6. PÁGINA: ASSISTENTE IA (VERSÃO RECURSOS TOTAIS)
 # =====================================================================
 elif menu == "5. ASSISTENTE IA":
     st.header("🤖 Analista Criminal Virtual")
-    st.markdown("Converse com a Inteligência Artificial. Ela conhece os padrões, leis criminais e a estrutura do seu banco de dados.")
+    st.markdown("Converse com a Inteligência Artificial sobre os padrões e dados do monitoramento.")
     
-    # Campo para colocar a Chave na barra lateral
-    api_key_usuario = st.sidebar.text_input("🔑 Sua Chave API do Gemini:", type="password", help="Pegue gratuitamente em aistudio.google.com")
+    # Campo na lateral para a chave
+    api_key_input = st.sidebar.text_input("🔑 Sua Chave API do Gemini:", type="password")
     
     st.write("---")
 
-    if not api_key_usuario:
-        st.warning("👈 Insira sua chave de API do Google Gemini no menu lateral para ativar o Analista.")
-        st.info("**Como pegar a chave grátis:**\n1. Acesse [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. Faça login e clique em 'Create API Key'\n3. Copie o código e cole no campo lateral.")
+    if not api_key_input:
+        st.warning("👈 Insira sua chave de API do Google Gemini no menu lateral para começar.")
+        st.info("Se precisar de uma chave nova: [Google AI Studio](https://aistudio.google.com/app/apikey)")
     else:
         try:
-            # Configura a Inteligência Artificial
-            genai.configure(api_key=api_key_usuario)
+            # .strip() remove espaços acidentais antes ou depois da chave
+            chave_limpa = api_key_input.strip()
+            genai.configure(api_key=chave_limpa)
             
+            # Carrega dados para contexto
             df_contexto = carregar_dados()
-            instrucoes_sistema = f"Você é um especialista em análise criminal, inteligência policial e ciência de dados. Você está operando dentro de um Dashboard de Monitoramento de Homicídios. O banco de dados atual possui {len(df_contexto)} registros. As colunas disponíveis são: {', '.join(df_contexto.columns)}. Ajude o usuário a cruzar dados, entender métodos de investigação e analisar cenários de ORCRIM."
             
-            # AQUI ESTÁ A CORREÇÃO: Nome atualizado do modelo para não dar erro 404
-            # Versão numérica exata (blindada contra erro 404)
-            model = genai.GenerativeModel('gemini-1.5-flash-pro', system_instruction=instrucoes_sistema)
+            # Instruções de comportamento da IA
+            instrucoes = (
+                "Você é um analista criminal sênior. "
+                f"Você tem acesso a um banco de dados com {len(df_contexto)} registros. "
+                f"As colunas são: {', '.join(df_contexto.columns)}. "
+                "Responda de forma técnica, objetiva e baseada em inteligência policial."
+            )
             
-            # Cria a memória do Chat (se não existir ainda)
+            # Tentativa com o modelo estável mais recente
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=instrucoes)
+            
             if "chat_gemini" not in st.session_state:
                 st.session_state.chat_gemini = model.start_chat(history=[])
-                # Saudação inicial fictícia
-                st.session_state.mensagens_front = [{"role": "model", "content": f"Sistemas conectados. Analisei sua planilha e encontrei **{len(df_contexto)} ocorrências**. Como posso ajudar na investigação hoje?"}]
+                st.session_state.mensagens_front = [
+                    {"role": "model", "content": "Sistemas prontos. Como posso auxiliar na análise dos dados hoje?"}
+                ]
             
-            # Mostra o histórico na tela
             for msg in st.session_state.mensagens_front:
                 role_tela = "assistant" if msg["role"] == "model" else "user" 
                 with st.chat_message(role_tela):
                     st.markdown(msg["content"])
 
-            # A caixinha onde você digita a pergunta
-            pergunta = st.chat_input("Pergunte algo ao Analista Virtual...")
+            pergunta = st.chat_input("Digite sua pergunta técnica...")
             
             if pergunta:
                 with st.chat_message("user"):
                     st.markdown(pergunta)
                 st.session_state.mensagens_front.append({"role": "user", "content": pergunta})
                 
-                with st.spinner("Analisando padrões..."):
-                    resposta_ia = st.session_state.chat_gemini.send_message(pergunta)
+                with st.spinner("Processando inteligência..."):
+                    # Enviando para a API
+                    response = st.session_state.chat_gemini.send_message(pergunta)
                 
                 with st.chat_message("assistant"):
-                    st.markdown(resposta_ia.text)
-                st.session_state.mensagens_front.append({"role": "model", "content": resposta_ia.text})
+                    st.markdown(response.text)
+                st.session_state.mensagens_front.append({"role": "model", "content": response.text})
                 
         except Exception as e:
-            st.error(f"Erro na conexão com a IA. Detalhe técnico: {e}")
+            st.error(f"Erro de Conexão: {e}")
+            if "API_KEY_INVALID" in str(e):
+                st.error("Dica: Tente gerar uma nova chave no AI Studio. A chave atual não foi reconhecida pelo Google.")
