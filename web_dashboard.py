@@ -84,27 +84,67 @@ def tela_acesso():
         with aba_login:
             mat_login = st.text_input("Matrícula", key="login_mat")
             senha_login = st.text_input("Senha", type="password", key="login_pass")
+            
             if st.button("Acessar Painel"):
                 try:
-                    # Forçando a leitura da aba 'USUARIOS' via CSV
+                    # Link de exportação direta da aba USUARIOS
                     url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
                     df_users = pd.read_csv(url_users)
                     
+                    # Padronização de colunas (Remove espaços e coloca em maiúsculo)
                     df_users.columns = [str(col).strip().upper() for col in df_users.columns]
-                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
                     
-                    # Criptografia e Comparação
-                    senha_digitada_hash = gerar_hash(senha_login)
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & (df_users['SENHA'] == senha_digitada_hash)]
+                    # Converte matrícula para string e limpa espaços
+                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
+                    mat_login_limpa = str(mat_login).strip()
+                    
+                    # Criptografia da senha digitada
+                    senha_hash = gerar_hash(senha_login)
+                    
+                    # Busca o usuário
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & 
+                                         (df_users['SENHA'] == senha_hash)]
+                    
                     if not user_match.empty:
-                        if user_match.iloc[0]['STATUS'] == 'Aprovado':
+                        # Verifica o Status (Aprovado / Pendente)
+                        status = str(user_match.iloc[0]['STATUS']).strip().upper()
+                        if status == 'APROVADO':
                             st.session_state.logado = True
                             st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
                             st.session_state.user_nome = user_match.iloc[0]['NOME']
                             st.rerun()
-                        else: st.error("Acesso Pendente de Aprovação.")
-                    else: st.error("Matrícula ou Senha inválidos.")
-                except: st.error("Erro na base de usuários. Verifique o compartilhamento.")
+                        else:
+                            st.error(f"Acesso negado. Seu status atual é: {status}")
+                    else:
+                        st.error("Matrícula ou Senha inválidos.")
+                except Exception as e:
+                    st.error("⚠️ Erro de conexão com a base de usuários.")
+                    st.info("Certifique-se de que a planilha de acesso está compartilhada como 'Qualquer pessoa com o link'.")
+
+        with aba_cadastro:
+            n_cad = st.text_input("Nome Completo", key="cad_nome")
+            m_cad = st.text_input("Matrícula", key="cad_mat")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass")
+            
+            if st.button("Enviar Solicitação"):
+                if n_cad and m_cad and s_cad:
+                    try:
+                        df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+                        if str(m_cad) in df_u['MATRICULA'].astype(str).values:
+                            st.warning("Esta matrícula já possui cadastro.")
+                        else:
+                            novo = pd.DataFrame([{
+                                "NOME": n_cad, 
+                                "MATRICULA": str(m_cad), 
+                                "SENHA": gerar_hash(s_cad), 
+                                "NIVEL": "Visitante", 
+                                "STATUS": "Pendente"
+                            }])
+                            df_updated = pd.concat([df_users if 'df_users' in locals() else df_u, novo], ignore_index=True)
+                            conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
+                            st.success("Solicitação enviada com sucesso!")
+                    except:
+                        st.error("Erro ao gravar cadastro. Verifique as permissões da planilha.")
 
         with aba_cadastro:
             n_cad = st.text_input("Nome Completo", key="cad_nome")
