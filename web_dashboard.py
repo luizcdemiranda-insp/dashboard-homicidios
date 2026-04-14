@@ -235,6 +235,21 @@ else:
         st.session_state.logado = False
         st.rerun()
 
+# ==========================================================
+# ---> CABEÇALHO OFICIAL (COM LOGOS) <---
+# ==========================================================
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_esq:
+        try: st.image("logo1.png", width=150)
+        except: st.write("")
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
+    with col_dir:
+        try: st.image("logo2.png", width=150)
+        except: st.write("")
+    st.write("---")
+# ==========================================================
+    
     df = carregar_dados()
 
     if menu == "1. VISÃO GERAL":
