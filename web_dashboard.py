@@ -351,61 +351,71 @@ elif menu == "4. MODO ANALÍTICO":
         st.error(f"Erro ao gerar a tabela: {e}")
 
 # =====================================================================
-# 6. PÁGINA: ASSISTENTE IA (VERSÃO CORRIGIDA E BLINDADA)
+# 6. PÁGINA: ASSISTENTE IA (VERSÃO AUTO-ADAPTÁVEL)
 # =====================================================================
 elif menu == "5. ASSISTENTE IA":
     st.header("🤖 Analista Criminal Virtual")
     st.markdown("Converse com a Inteligência Artificial sobre os padrões e dados do monitoramento.")
     
-    # Campo na lateral para a chave
     api_key_input = st.sidebar.text_input("🔑 Sua Chave API do Gemini:", type="password")
-    
     st.write("---")
 
     if not api_key_input:
-        st.warning("👈 Insira sua chave de API do Google Gemini no menu lateral para começar.")
-        st.info("Se precisar de uma chave nova: [Google AI Studio](https://aistudio.google.com/app/apikey)")
+        st.warning("👈 Insira sua chave de API no menu lateral.")
     else:
         try:
-            # 1. Configuração Inicial
             chave_limpa = api_key_input.strip()
             genai.configure(api_key=chave_limpa)
             
-            # 2. Preparação do Contexto
+            # Carrega dados para o Analista saber do que estamos falando
             df_contexto = carregar_dados()
-            instrucoes = (
-                "Você é um analista criminal sênior. "
-                f"Você tem acesso a um banco de dados com {len(df_contexto)} registros. "
-                f"As colunas são: {', '.join(df_contexto.columns)}. "
-                "Responda de forma técnica, objetiva e baseada em inteligência policial."
-            )
+            contexto_dados = f"Você é um analista criminal. O banco de dados tem {len(df_contexto)} registros com as colunas: {', '.join(df_contexto.columns)}."
+
+            # --- MÁGICA: DESCOBRINDO O MODELO DISPONÍVEL ---
+            if "modelo_ativo" not in st.session_state:
+                modelos_possiveis = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.0-pro']
+                modelo_escolhido = None
+                
+                # Testamos qual modelo sua chave aceita
+                for m in modelos_possiveis:
+                    try:
+                        teste_model = genai.GenerativeModel(m)
+                        teste_model.generate_content("Oi", generation_config={"max_output_tokens": 1})
+                        modelo_escolhido = m
+                        break
+                    except:
+                        continue
+                
+                if modelo_escolhido:
+                    st.session_state.modelo_ativo = modelo_escolhido
+                else:
+                    st.session_state.modelo_ativo = "gemini-1.5-flash" # Fallback
+
+            # Inicializa o modelo com o que funcionou no teste
+            model = genai.GenerativeModel(st.session_state.modelo_ativo)
             
-            # Trocando para o modelo 1.0 Pro, que é o mais estável para evitar o erro 404
-model = genai.GenerativeModel('gemini-1.0-pro', system_instruction=instrucoes)
-            
-            # 4. Gerenciamento do Chat
             if "chat_gemini" not in st.session_state:
                 st.session_state.chat_gemini = model.start_chat(history=[])
                 st.session_state.mensagens_front = [
-                    {"role": "model", "content": "Sistemas prontos. Como posso auxiliar na análise dos dados hoje?"}
+                    {"role": "model", "content": f"Sistemas prontos (Modelo: {st.session_state.modelo_ativo}). Como posso ajudar?"}
                 ]
             
-            # Exibição das Mensagens
             for msg in st.session_state.mensagens_front:
                 role_tela = "assistant" if msg["role"] == "model" else "user" 
                 with st.chat_message(role_tela):
                     st.markdown(msg["content"])
 
-            # Entrada do Usuário
-            pergunta = st.chat_input("Digite sua pergunta técnica...")
+            pergunta = st.chat_input("Digite sua pergunta...")
             
             if pergunta:
                 with st.chat_message("user"):
                     st.markdown(pergunta)
                 st.session_state.mensagens_front.append({"role": "user", "content": pergunta})
                 
-                with st.spinner("Processando inteligência..."):
-                    response = st.session_state.chat_gemini.send_message(pergunta)
+                with st.spinner("Analisando..."):
+                    # Enviamos o contexto junto com a pergunta para garantir que a IA saiba dos dados
+                    prompt_completo = f"CONTEXTO: {contexto_dados}\n\nPERGUNTA DO USUÁRIO: {pergunta}"
+                    response = st.session_state.chat_gemini.send_message(prompt_completo)
                 
                 with st.chat_message("assistant"):
                     st.markdown(response.text)
@@ -413,5 +423,3 @@ model = genai.GenerativeModel('gemini-1.0-pro', system_instruction=instrucoes)
 
         except Exception as e:
             st.error(f"Erro de Conexão: {e}")
-            st.info("Dica: Verifique se sua chave API é válida e se o modelo 'gemini-1.5-flash' está disponível em sua região.")
-
