@@ -114,30 +114,38 @@ def tela_acesso():
                 except Exception as e:
                     st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
 
-        with aba_cadastro:
+with aba_cadastro:
             st.markdown("### 📝 Solicitação de Acesso")
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
             m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input") # Adicionado campo de senha
             
             if st.button("Enviar Solicitação"):
-                if n_cad and m_cad:
+                if n_cad and m_cad and s_cad:
                     try:
+                        # Gera o Hash da senha escolhida na hora
+                        senha_hash = gerar_hash(s_cad)
+                        
                         # Configurações do e-mail (pegando do Secrets)
                         email_remetente = st.secrets["email"]["remetente"]
                         email_senha = st.secrets["email"]["senha"]
                         email_destino = "luizcdemiranda.insp@gmail.com"
 
-                        # Criando o corpo do e-mail
+                        # Criando o corpo do e-mail com a senha e o Hash
                         corpo = f"""
                         NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
                         
                         Nome: {n_cad}
                         Matrícula: {m_cad}
+                        Senha Escolhida: {s_cad}
+                        
+                        Hash SHA256 (Copie este código para a planilha):
+                        {senha_hash}
                         
                         Instruções para o Master:
                         1. Verifique a identidade do servidor.
                         2. Acesse a planilha de usuários.
-                        3. Adicione o Nome, Matrícula e gere um hash SHA256 para a senha.
+                        3. Adicione o Nome, Matrícula e cole o Hash SHA256 acima na coluna SENHA.
                         4. Defina o Status como 'Aprovado'.
                         """
 
@@ -154,14 +162,14 @@ def tela_acesso():
                         server.send_message(msg)
                         server.quit()
 
-                        st.success("✅ Solicitação enviada! Você receberá suas credenciais em breve.")
-                        st.info("O Administrador foi notificado por e-mail para realizar seu cadastro manual.")
+                        st.success("✅ Solicitação enviada! O Administrador fará a liberação.")
+                        st.info("Sua senha foi registrada de forma segura.")
                         
                     except Exception as e:
                         st.error(f"Erro ao processar solicitação: {e}")
                         st.info("Certifique-se de configurar as credenciais de e-mail no painel de Secrets.")
                 else:
-                    st.warning("Por favor, preencha todos os campos.")
+                    st.warning("Por favor, preencha todos os campos, incluindo a senha.")
 
 # =====================================================================
 # 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
