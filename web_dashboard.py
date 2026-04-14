@@ -380,8 +380,8 @@ elif menu == "5. ASSISTENTE IA":
                 "Responda de forma técnica, objetiva e baseada em inteligência policial."
             )
             
-            # 3. Definição do Modelo (Usando o caminho estável)
-            model = genai.GenerativeModel('models/gemini-1.5-flash', system_instruction=instrucoes)
+            # Trocando para o modelo 1.0 Pro, que é o mais estável para evitar o erro 404
+model = genai.GenerativeModel('gemini-1.0-pro', system_instruction=instrucoes)
             
             # 4. Gerenciamento do Chat
             if "chat_gemini" not in st.session_state:
@@ -414,3 +414,4 @@ elif menu == "5. ASSISTENTE IA":
         except Exception as e:
             st.error(f"Erro de Conexão: {e}")
             st.info("Dica: Verifique se sua chave API é válida e se o modelo 'gemini-1.5-flash' está disponível em sua região.")
+
