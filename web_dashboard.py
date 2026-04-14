@@ -55,8 +55,8 @@ def tela_acesso():
             if st.button("Entrar"):
                 # Busca na planilha de usuários
                 # Substitua o comando de leitura por este:
-                url_users = f"https://docs.google.com/spreadsheets/d/{1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw}/export?format=csv&gid=0"
-                df_users = pd.read_csv(url_users)
+                    url_users = f"https://docs.google.com/spreadsheets/d/1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw/export?format=csv&gid=0"
+                   df_users = pd.read_csv(url_users)
                 # Garante que matrícula seja string para comparar
                 df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
                 
@@ -90,7 +90,7 @@ def tela_acesso():
                             "SENHA": gerar_hash(senha_cad), "NIVEL": "Visitante", "STATUS": "Pendente"
                         }])
                         df_updated = pd.concat([df_users, novo_u], ignore_index=True)
-                        conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
+                        conn.update(spreadsheet=1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw, worksheet="USUARIOS", data=df_updated)
                         st.success("Solicitação enviada! Aguarde a ativação pelo Administrador.")
                 else:
                     st.error("Preencha todos os campos.")
