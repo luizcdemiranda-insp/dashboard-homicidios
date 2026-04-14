@@ -54,7 +54,9 @@ def tela_acesso():
             
             if st.button("Entrar"):
                 # Busca na planilha de usuários
-                df_users = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+                # Substitua o comando de leitura por este:
+url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/export?format=csv&gid=0"
+df_users = pd.read_csv(url_users)
                 # Garante que matrícula seja string para comparar
                 df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
                 
@@ -79,7 +81,7 @@ def tela_acesso():
             
             if st.button("Solicitar Acesso"):
                 if nome_cad and mat_cad and senha_cad:
-                    df_users = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+                    df_users = conn.read(spreadsheet="1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw", worksheet="USUARIOS")
                     if mat_cad in df_users['MATRICULA'].astype(str).values:
                         st.warning("Esta matrícula já possui solicitação ou cadastro.")
                     else:
