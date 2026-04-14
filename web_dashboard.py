@@ -177,6 +177,47 @@ def gerar_dashboard(df_filtrado):
                 grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350)
                 st.altair_chart(grafico_circ, use_container_width=True)
 
+    st.write("<br>", unsafe_allow_html=True)
+
+    # --- INÍCIO DOS CARDS DE ORCRIM ---
+    st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
+    
+    sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
+    col_orcrim = sugestoes_orcrim[0] if sugestoes_orcrim else (df_filtrado.columns[30] if len(df_filtrado.columns) > 30 else None)
+
+    if col_orcrim:
+        col_orcrim_data = df_filtrado[col_orcrim]
+        if isinstance(col_orcrim_data, pd.DataFrame):
+            col_orcrim_data = col_orcrim_data.iloc[:, 0]
+        
+        def classificar_orcrim(texto):
+            texto = str(texto).strip().upper() 
+            if "INVESTIGA" in texto: return "EM INVESTIGAÇÃO"
+            if "X MIL" in texto or "VS MIL" in texto: return "TRÁFICO X MILÍCIA"
+            if "TRÁFICO" in texto or "TRAFICO" in texto: return "TRÁFICO"
+            if "MILÍCIA" in texto or "MILICIA" in texto: return "MILÍCIA"
+            return "OUTROS"
+
+        # Cópia para não dar aviso no Pandas
+        df_filtrado_orcrim = df_filtrado.copy()
+        df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
+        
+        tot_investiga = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO'])
+        tot_trafico = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO'])
+        tot_milicia = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA'])
+        tot_traf_mil = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA'])
+
+        card1, card2, card3, card4 = st.columns(4)
+        
+        with card1:
+            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
+        with card2:
+            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
+        with card3:
+            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
+        with card4:
+            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
+
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
 # =====================================================================
