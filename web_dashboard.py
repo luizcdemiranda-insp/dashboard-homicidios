@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import hashlib
-import google.generativeai as genai
 from streamlit_gsheets import GSheetsConnection
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E ESTADO
 # =====================================================================
-st.set_page_config(page_title="Monitoramento Criminal v2.0", layout="wide")
+st.set_page_config(page_title="Monitoramento Criminal", layout="wide")
 
+# IDs das suas planilhas
 ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 ID_PLANILHA_CRIMES = "1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc"
 
@@ -26,25 +26,24 @@ if "user_nome" not in st.session_state:
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # =====================================================================
-# 2. FUNÇÕES DE APOIO
+# 2. FUNÇÃO DE CARREGAMENTO (DADOS DE CRIMES)
 # =====================================================================
 @st.cache_data(ttl=600)
 def carregar_dados():
     url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
     df = pd.read_csv(url)
     df.columns = [str(col).strip().upper() for col in df.columns]
-    if 'ANO' not in df.columns and 'DATA' in df.columns:
-        df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     return df
 
 # =====================================================================
-# 3. INTERFACE DE ACESSO (LOGIN/CADASTRO)
+# 3. TELA DE ACESSO (LOGIN / CADASTRO)
 # =====================================================================
 def tela_acesso():
     st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>🛡️ SISTEMA DE INTELIGÊNCIA</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         aba_login, aba_cadastro = st.tabs(["🔐 Acessar", "📝 Solicitar Cadastro"])
+        
         with aba_login:
             mat_login = st.text_input("Matrícula")
             senha_login = st.text_input("Senha", type="password")
@@ -53,7 +52,10 @@ def tela_acesso():
                     url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/export?format=csv&gid=0"
                     df_users = pd.read_csv(url_users)
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & (df_users['SENHA'] == gerar_hash(senha_login))]
+                    
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & 
+                                         (df_users['SENHA'] == gerar_hash(senha_login))]
+                    
                     if not user_match.empty:
                         if user_match.iloc[0]['STATUS'] == 'Aprovado':
                             st.session_state.logado = True
@@ -68,152 +70,140 @@ def tela_acesso():
             n_cad = st.text_input("Nome Completo")
             m_cad = st.text_input("Matrícula Funcional")
             s_cad = st.text_input("Defina uma Senha", type="password")
-            if st.button("Solicitar Cadastro"):
+            if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-                    if str(m_cad) in df_u['MATRICULA'].astype(str).values: st.warning("Matrícula já existe.")
+                    if str(m_cad) in df_u['MATRICULA'].astype(str).values: st.warning("Matrícula já cadastrada.")
                     else:
                         novo = pd.DataFrame([{"NOME": n_cad, "MATRICULA": str(m_cad), "SENHA": gerar_hash(s_cad), "NIVEL": "Visitante", "STATUS": "Pendente"}])
                         conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=pd.concat([df_u, novo], ignore_index=True))
-                        st.success("Enviado para aprovação do Administrador!")
+                        st.success("Solicitação enviada! Aguarde a ativação.")
 
 # =====================================================================
-# 4. DASHBOARD PRINCIPAL (LOGADO)
+# 4. DASHBOARD (O QUE APARECE APÓS O LOGIN)
 # =====================================================================
 if not st.session_state.logado:
     tela_acesso()
 else:
     # --- BARRA LATERAL ---
     st.sidebar.title(f"👤 {st.session_state.user_nome}")
-    st.sidebar.info(f"Nível: {st.session_state.user_nivel}")
+    st.sidebar.write(f"Nível: **{st.session_state.user_nivel}**")
     
-    opcoes = ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
-    if st.session_state.user_nivel == "Master": opcoes.append("⚙️ CONFIGURAÇÕES")
+    opcoes = ["1. VISÃO GERAL", "2. MOTIVAÇÃO / DELITO"]
+    if st.session_state.user_nivel == "Master":
+        opcoes.append("⚙️ CONFIGURAÇÕES")
+        
     menu = st.sidebar.radio("Navegação:", opcoes)
     
     if st.sidebar.button("Sair"):
         st.session_state.logado = False
         st.rerun()
 
-    # Carregamento global de dados para as páginas
-    df = carregar_dados()
-
-    # --- PÁGINA 1: VISÃO GERAL ---
+    # --- PÁGINA 1: VISÃO GERAL (Placeholder ou seu código anterior) ---
     if menu == "1. VISÃO GERAL":
-        st.title("📊 Visão Geral do Monitoramento")
-        anos = sorted(df['ANO'].dropna().unique().astype(int), reverse=True)
-        ano_sel = st.sidebar.selectbox("Ano de Referência", anos)
-        df_ano = df[df['ANO'] == ano_sel]
-        
-        # Cards de Ontem
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Ocorrências", len(df_ano))
-        # Se houver coluna de vítimas:
-        if 'VITIMAS' in df_ano.columns:
-            c2.metric("Total de Vítimas", int(df_ano['VITIMAS'].sum()))
-        
-        st.subheader(f"Distribuição por Município - {ano_sel}")
-        grafico = alt.Chart(df_ano).mark_bar(color='#ff4b4b').encode(
-            x=alt.X('count()', title='Quantidade'),
-            y=alt.Y('MUNICIPIO:N', sort='-x', title='Cidade'),
-            tooltip=['MUNICIPIO', 'count()']
-        ).properties(height=500)
-        st.altair_chart(grafico, use_container_width=True)
+        st.title("📊 Visão Geral")
+        st.write("Bem-vindo ao sistema de monitoramento.")
 
-    # --- PÁGINA 2: CASOS POR ÁREA (COM BOTÕES DE ONTEM) ---
-    elif menu == "2. CASOS POR ÁREA":
-        st.title("📍 Análise Regional Comparativa")
+    # --- PÁGINA: MOTIVAÇÃO / DELITO (SEU CÓDIGO RECUPERADO) ---
+    elif menu == "2. MOTIVAÇÃO / DELITO":
+        st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO E DELITO")
         
-        municipios = sorted(df['MUNICIPIO'].unique())
-        
-        st.write("**Selecione os Municípios:**")
-        col_b1, col_b2, _ = st.columns([1, 1, 4])
-        
-        if col_b1.button("✓ Todos"):
-            for m in municipios: st.session_state[f"mun_{m}"] = True
-        if col_b2.button("✗ Limpar"):
-            for m in municipios: st.session_state[f"mun_{m}"] = False
-
-        cols = st.columns(5)
-        selecionados = []
-        for i, m in enumerate(municipios):
-            if f"mun_{m}" not in st.session_state: st.session_state[f"mun_{m}"] = True
-            if cols[i % 5].checkbox(m, key=f"mun_{m}"):
-                selecionados.append(m)
-
-        if selecionados:
-            df_comp = df[df['MUNICIPIO'].isin(selecionados)]
-            chart_area = alt.Chart(df_comp).mark_line(point=True).encode(
-                x='ANO:O',
-                y='count()',
-                color='MUNICIPIO:N',
-                tooltip=['ANO', 'MUNICIPIO', 'count()']
-            ).properties(height=400)
-            st.altair_chart(chart_area, use_container_width=True)
-
-    # --- PÁGINA 3: MODO ANALÍTICO ---
-    elif menu == "3. MODO ANALÍTICO":
-        st.title("📑 Base de Dados Bruta")
-        st.dataframe(df, use_container_width=True)
-
-    # --- PÁGINA 4: ASSISTENTE IA (SISTEMA RECUPERADO) ---
-    elif menu == "4. ASSISTENTE IA":
-        st.header("🤖 Analista Criminal Virtual")
-        api_key = st.sidebar.text_input("Chave API Gemini:", type="password")
-        
-        if not api_key:
-            st.warning("Insira a chave API para ativar a IA.")
-        else:
-            try:
-                genai.configure(api_key=api_key.strip())
-                if "modelo_oficial" not in st.session_state:
-                    with st.spinner("Detectando modelo..."):
-                        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                        st.session_state.modelo_oficial = next((m for m in modelos if "1.5-flash" in m), modelos[0])
+        try:
+            df = carregar_dados()
+            # Tratamento de data para extrair ano caso não exista
+            if 'ANO' not in df.columns and 'DATA' in df.columns:
+                df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
                 
-                model = genai.GenerativeModel(st.session_state.modelo_oficial)
-                if "chat" not in st.session_state:
-                    st.session_state.chat = model.start_chat(history=[])
-                    st.session_state.mensagens = [{"role": "assistant", "content": f"Conectado via {st.session_state.modelo_oficial}. Como posso auxiliar na análise?"}]
+            df = df.dropna(subset=['ANO'])
+            df['ANO'] = df['ANO'].astype(int).astype(str)
+            anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
 
-                for m in st.session_state.mensagens:
-                    with st.chat_message("assistant" if m["role"] == "assistant" else "user"):
-                        st.markdown(m["content"])
+            st.subheader("FILTROS DE ANÁLISE")
+            modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_motivo")
 
-                if prompt := st.chat_input("Ex: Qual o município com maior alta em 2023?"):
-                    st.session_state.mensagens.append({"role": "user", "content": prompt})
-                    with st.chat_message("user"): st.markdown(prompt)
-                    
-                    with st.spinner("IA Analisando..."):
-                        ctx = f"Banco de dados: {len(df)} registros. Colunas: {list(df.columns)}. "
-                        res = st.session_state.chat.send_message(f"CONTEXTO: {ctx}\n\nPERGUNTA: {prompt}")
-                        st.session_state.mensagens.append({"role": "assistant", "content": res.text})
-                        st.rerun()
-            except Exception as e: st.error(f"Erro na IA: {e}")
+            anos_selecionados = []
+            if modo_analise == "ANÁLISE INDIVIDUAL":
+                col_drop, _ = st.columns([2, 8]) 
+                ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis, key="ano_motivo_ind")
+                anos_selecionados = [ano_escolhido]
+            else:
+                st.write("**SELECIONE OS ANOS:**")
+                col_btn1, col_btn2, _ = st.columns([2, 2, 6])
+                if col_btn1.button("✓ Todos", key="all_mot"):
+                    for a in anos_disponiveis: st.session_state[f"chk_mot_{a}"] = True
+                if col_btn2.button("✗ Limpar", key="none_mot"):
+                    for a in anos_disponiveis: st.session_state[f"chk_mot_{a}"] = False
 
-    # --- PÁGINA ⚙️ CONFIGURAÇÕES (MASTER) ---
+                for a in anos_disponiveis:
+                    if f"chk_mot_{a}" not in st.session_state: st.session_state[f"chk_mot_{a}"] = True
+                
+                cols = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
+                for i, a in enumerate(anos_disponiveis):
+                    cols[i % 8].checkbox(a, key=f"chk_mot_{a}")
+                anos_selecionados = [a for a in anos_disponiveis if st.session_state.get(f"chk_mot_{a}", False)]
+
+            if anos_selecionados:
+                df_motivo = df[df['ANO'].isin(anos_selecionados)].copy()
+                
+                col_motivo = next((c for c in df_motivo.columns if "MOTIVO" in str(c) or "MOTIVAÇÃO" in str(c)), None)
+                col_meio = next((c for c in df_motivo.columns if "MEIO" in str(c) or "INSTRUMENTO" in str(c)), None)
+
+                st.write("---")
+                
+                if not col_motivo and not col_meio:
+                    st.warning("⚠️ Colunas de 'MOTIVO' ou 'MEIO' não identificadas.")
+                else:
+                    col_esq, col_dir = st.columns(2)
+
+                    with col_esq:
+                        st.markdown("### 🎯 PRINCIPAIS MOTIVAÇÕES")
+                        if col_motivo:
+                            raw_motivo = df_motivo.loc[:, col_motivo]
+                            dados_motivo = raw_motivo.astype(str).str.strip().str.upper()
+                            dados_motivo = dados_motivo[~dados_motivo.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
+                            
+                            if not dados_motivo.empty:
+                                tabela_motivo = dados_motivo.value_counts().reset_index()
+                                tabela_motivo.columns = ['MOTIVO', 'TOTAL']
+                                grafico_motivo = alt.Chart(tabela_motivo.head(10)).mark_arc(innerRadius=50).encode(
+                                    theta="TOTAL:Q", 
+                                    color=alt.Color("MOTIVO:N", legend=alt.Legend(title="Motivo")),
+                                    tooltip=['MOTIVO', 'TOTAL']
+                                ).properties(height=400)
+                                st.altair_chart(grafico_motivo, use_container_width=True)
+                            else: st.info("Dados de motivação vazios.")
+
+                    with col_dir:
+                        st.markdown("### 🔪 MEIO EMPREGADO")
+                        if col_meio:
+                            raw_meio = df_motivo.loc[:, col_meio]
+                            dados_meio = raw_meio.astype(str).str.strip().str.upper()
+                            dados_meio = dados_meio[~dados_meio.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
+                            
+                            if not dados_meio.empty:
+                                tabela_meio = dados_meio.value_counts().reset_index()
+                                tabela_meio.columns = ['MEIO', 'TOTAL']
+                                grafico_meio = alt.Chart(tabela_meio.head(10)).mark_bar(color='#ff4b4b').encode(
+                                    x='TOTAL:Q', y=alt.Y('MEIO:N', sort='-x', title=''), tooltip=['MEIO', 'TOTAL']
+                                ).properties(height=400)
+                                st.altair_chart(grafico_meio, use_container_width=True)
+                            else: st.info("Dados de meio empregado vazios.")
+
+        except Exception as e:
+            st.error(f"Erro técnico: {e}")
+
+    # --- PÁGINA: CONFIGURAÇÕES (GESTÃO DE USUÁRIOS) ---
     elif menu == "⚙️ CONFIGURAÇÕES":
-        st.title("⚙️ Painel de Controle Master")
+        st.title("⚙️ Painel Master")
         df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-        
-        st.subheader("Aprovações Pendentes")
         pendentes = df_u[df_u['STATUS'] == 'Pendente']
+        
         if not pendentes.empty:
             for i, r in pendentes.iterrows():
-                c1, c2, c3 = st.columns([2, 1, 1])
+                c1, c2 = st.columns([3, 1])
                 c1.write(f"**{r['NOME']}** (Mat: {r['MATRICULA']})")
-                if c2.button("✅ Aprovar", key=f"apr_{i}"):
+                if c2.button("Aprovar", key=f"ap_{i}"):
                     df_u.at[i, 'STATUS'] = 'Aprovado'
                     conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_u)
-                    st.success("Aprovado!")
                     st.rerun()
-                if c3.button("❌ Bloquear", key=f"bloq_{i}"):
-                    df_u.at[i, 'STATUS'] = 'Bloqueado'
-                    conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_u)
-                    st.rerun()
-        else:
-            st.info("Nenhuma solicitação pendente.")
-            
-        st.write("---")
-        st.subheader("Usuários Cadastrados")
-        st.dataframe(df_u[['NOME', 'MATRICULA', 'NIVEL', 'STATUS']])
+        st.dataframe(df_u)
