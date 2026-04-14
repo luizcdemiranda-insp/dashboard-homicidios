@@ -114,7 +114,7 @@ def tela_acesso():
                 except Exception as e:
                     st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
 
-with aba_cadastro:
+        with aba_cadastro:
             st.markdown("### 📝 Solicitação de Acesso")
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
             m_cad = st.text_input("Matrícula", key="cad_mat_input")
