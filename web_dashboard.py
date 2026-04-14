@@ -121,35 +121,42 @@ def tela_acesso():
             if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     try:
-                        # Lê a base atual
+                        # 1. Busca a base atual
                         df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
                         
-                        # LIMPEZA DE DEFESA: Remove linhas 100% vazias lidas por engano
+                        # 2. LIMPEZA RADICAL: Remove linhas vazias e garante que tudo é string
                         df_u = df_u.dropna(how="all")
+                        df_u = df_u.astype(str)
                         
-                        if str(m_cad).strip() in df_u['MATRICULA'].astype(str).str.strip().values:
-                            st.warning("Esta matrícula já possui uma solicitação.")
+                        # 3. Verifica se a matrícula já existe (sem espaços extras)
+                        matriculas_existentes = df_u['MATRICULA'].str.strip().values
+                        if str(m_cad).strip() in matriculas_existentes:
+                            st.warning("Esta matrícula já possui uma solicitação em análise.")
                         else:
+                            # 4. Cria o novo registro garantindo que não há valores nulos
                             novo = pd.DataFrame([{
-                                "NOME": n_cad, 
+                                "NOME": str(n_cad).strip(), 
                                 "MATRICULA": str(m_cad).strip(), 
-                                "SENHA": gerar_hash(s_cad), 
+                                "SENHA": str(gerar_hash(s_cad)), 
                                 "NIVEL": "Visitante", 
                                 "STATUS": "Pendente"
                             }])
                             
-                            # Junta a base antiga com a nova
+                            # 5. Combina as bases
                             df_updated = pd.concat([df_u, novo], ignore_index=True)
                             
-                            # LIMPEZA DE DEFESA 2: Troca qualquer "NaN" fantasma por texto vazio
+                            # 6. TRATAMENTO FINAL ANTI-ERRO 400:
+                            # Troca qualquer valor nulo por vazio e remove índices fantasmas
                             df_updated = df_updated.fillna("")
+                            df_updated = df_updated.astype(str)
                             
-                            # Grava no Google Sheets
+                            # 7. Tenta a gravação
                             conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
-                            st.success("Solicitação enviada com sucesso! Aguarde a aprovação do Administrador.")
+                            st.success("Solicitação enviada! O administrador foi notificado.")
+                            
                     except Exception as e:
-                        st.error(f"Erro ao gravar dados: {e}")
-                        st.info("Verifique se a planilha está compartilhada como 'Editor'.")
+                        st.error(f"Erro técnico ao gravar: {e}")
+                        st.info("💡 Dica: Verifique se os nomes das colunas na sua planilha são EXATAMENTE: NOME, MATRICULA, SENHA, NIVEL, STATUS")
 
 # =====================================================================
 # 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
