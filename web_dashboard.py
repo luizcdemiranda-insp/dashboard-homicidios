@@ -55,7 +55,7 @@ def tela_acesso():
             if st.button("Entrar"):
                 # Busca na planilha de usuários
                 # Substitua o comando de leitura por este:
-url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/export?format=csv&gid=0"
+url_users = f"https://docs.google.com/spreadsheets/d/{"1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"}/export?format=csv&gid=0"
 df_users = pd.read_csv(url_users)
                 # Garante que matrícula seja string para comparar
                 df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
