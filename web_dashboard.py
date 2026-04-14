@@ -114,50 +114,60 @@ def tela_acesso():
                         st.info(f"Colunas que o sistema encontrou: {df_users.columns.tolist()}")
 
         with aba_cadastro:
+            import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# ... (dentro da função tela_acesso, na aba_cadastro)
+
+        with aba_cadastro:
+            st.markdown("### 📝 Solicitação de Acesso")
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
             m_cad = st.text_input("Matrícula", key="cad_mat_input")
-            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
             
             if st.button("Enviar Solicitação"):
-                if n_cad and m_cad and s_cad:
+                if n_cad and m_cad:
                     try:
-                        # 1. Busca a base atual
-                        df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-                        
-                        # 2. LIMPEZA RADICAL: Remove linhas vazias e garante que tudo é string
-                        df_u = df_u.dropna(how="all")
-                        df_u = df_u.astype(str)
-                        
-                        # 3. Verifica se a matrícula já existe (sem espaços extras)
-                        matriculas_existentes = df_u['MATRICULA'].str.strip().values
-                        if str(m_cad).strip() in matriculas_existentes:
-                            st.warning("Esta matrícula já possui uma solicitação em análise.")
-                        else:
-                            # 4. Cria o novo registro garantindo que não há valores nulos
-                            novo = pd.DataFrame([{
-                                "NOME": str(n_cad).strip(), 
-                                "MATRICULA": str(m_cad).strip(), 
-                                "SENHA": str(gerar_hash(s_cad)), 
-                                "NIVEL": "Visitante", 
-                                "STATUS": "Pendente"
-                            }])
-                            
-                            # 5. Combina as bases
-                            df_updated = pd.concat([df_u, novo], ignore_index=True)
-                            
-                            # 6. TRATAMENTO FINAL ANTI-ERRO 400:
-                            # Troca qualquer valor nulo por vazio e remove índices fantasmas
-                            df_updated = df_updated.fillna("")
-                            df_updated = df_updated.astype(str)
-                            
-                            # 7. Tenta a gravação
-                            conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
-                            st.success("Solicitação enviada! O administrador foi notificado.")
-                            
-                    except Exception as e:
-                        st.error(f"Erro técnico ao gravar: {e}")
-                        st.info("💡 Dica: Verifique se os nomes das colunas na sua planilha são EXATAMENTE: NOME, MATRICULA, SENHA, NIVEL, STATUS")
+                        # Configurações do e-mail (pegando do Secrets)
+                        email_remetente = st.secrets["email"]["remetente"]
+                        email_senha = st.secrets["email"]["senha"]
+                        email_destino = "luizcdemiranda.insp@gmail.com"
 
+                        # Criando o corpo do e-mail
+                        corpo = f"""
+                        NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
+                        
+                        Nome: {n_cad}
+                        Matrícula: {m_cad}
+                        
+                        Instruções para o Master:
+                        1. Verifique a identidade do servidor.
+                        2. Acesse a planilha de usuários.
+                        3. Adicione o Nome, Matrícula e gere um hash SHA256 para a senha.
+                        4. Defina o Status como 'Aprovado'.
+                        """
+
+                        msg = MIMEMultipart()
+                        msg['From'] = email_remetente
+                        msg['To'] = email_destino
+                        msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
+                        msg.attach(MIMEText(corpo, 'plain'))
+
+                        # Envio via Servidor Gmail
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login(email_remetente, email_senha)
+                        server.send_message(msg)
+                        server.quit()
+
+                        st.success("✅ Solicitação enviada! Você receberá suas credenciais em breve.")
+                        st.info("O Administrador foi notificado por e-mail para realizar seu cadastro manual.")
+                        
+                    except Exception as e:
+                        st.error(f"Erro ao processar solicitação: {e}")
+                        st.info("Certifique-se de configurar as credenciais de e-mail no painel de Secrets.")
+                else:
+                    st.warning("Por favor, preencha todos os campos.")
 # =====================================================================
 # 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
 # =====================================================================
