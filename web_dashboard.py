@@ -382,8 +382,11 @@ elif menu == "5. ASSISTENTE IA":
                 "Responda de forma técnica, objetiva e baseada em inteligência policial."
             )
             
-            # Tentativa com o modelo estável mais recente
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=instrucoes)
+           # Tente esta linha primeiro (Endereço Completo):
+model = genai.GenerativeModel('models/gemini-1.5-flash', system_instruction=instrucoes)
+
+# SE O ERRO PERSISTIR, use esta versão Pro (que é mais estável para chaves novas):
+# model = genai.GenerativeModel('models/gemini-1.5-pro', system_instruction=instrucoes)
             
             if "chat_gemini" not in st.session_state:
                 st.session_state.chat_gemini = model.start_chat(history=[])
@@ -415,3 +418,4 @@ elif menu == "5. ASSISTENTE IA":
             st.error(f"Erro de Conexão: {e}")
             if "API_KEY_INVALID" in str(e):
                 st.error("Dica: Tente gerar uma nova chave no AI Studio. A chave atual não foi reconhecida pelo Google.")
+
