@@ -109,7 +109,9 @@ def tela_acesso():
                     else:
                         st.error("Matrícula ou Senha incorretos.")
                 except Exception as e:
-                    st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
+                    st.error(f"⚠️ O arquivo foi baixado, mas deu erro ao ler: {e}")
+                    if 'df_users' in locals():
+                        st.info(f"Colunas que o sistema encontrou: {df_users.columns.tolist()}")
 
         with aba_cadastro:
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
