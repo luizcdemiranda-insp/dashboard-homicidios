@@ -3,3 +3,4 @@ pandas
 altair
 google-generativeai>=0.7.2
 
+
