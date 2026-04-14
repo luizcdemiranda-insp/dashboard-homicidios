@@ -10,7 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 # =====================================================================
 st.set_page_config(page_title="Monitoramento Criminal", layout="wide")
 
-# Substitua pelo ID da sua nova planilha de ACESSO
+# ID da sua planilha de ACESSO
 ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 
 # Função para criptografar senha
@@ -29,13 +29,18 @@ if "user_nome" not in st.session_state:
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # =====================================================================
-# 2. FUNÇÕES DE APOIO (DADOS E LOGIN)
+# 2. FUNÇÕES DE APOIO (DADOS)
 # =====================================================================
 
-def carregar_dados_seguros():
-    # Aqui você coloca a sua função carregar_dados() que já funciona
-    # Aquela que lê a planilha de crimes principal
-    pass 
+@st.cache_data
+def carregar_dados_crimes():
+    # URL da sua planilha PRINCIPAL de crimes (a que usávamos antes)
+    url = "https://docs.google.com/spreadsheets/d/1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc/export?format=csv&gid=0"
+    df = pd.read_csv(url)
+    df.columns = [str(col).strip().upper() for col in df.columns]
+    if 'ANO' not in df.columns and 'DATA' in df.columns:
+        df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
+    return df
 
 # =====================================================================
 # 3. INTERFACE DE LOGIN E CADASTRO
@@ -53,26 +58,27 @@ def tela_acesso():
             senha_login = st.text_input("Senha", type="password")
             
             if st.button("Entrar"):
-                # Busca na planilha de usuários
-                # Substitua o comando de leitura por este:
-                    url_users = f"https://docs.google.com/spreadsheets/d/1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw/export?format=csv&gid=0"
-                df_users = pd.read_csv(url_users)
-                # Garante que matrícula seja string para comparar
-                df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
-                
-                user_match = df_users[(df_users['MATRICULA'] == mat_login) & 
-                                     (df_users['SENHA'] == gerar_hash(senha_login))]
-                
-                if not user_match.empty:
-                    if user_match.iloc[0]['STATUS'] == 'Aprovado':
-                        st.session_state.logado = True
-                        st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
-                        st.session_state.user_nome = user_match.iloc[0]['NOME']
-                        st.rerun()
+                # URL de exportação para CSV da planilha de USUÁRIOS
+                url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/export?format=csv&gid=0"
+                try:
+                    df_users = pd.read_csv(url_users)
+                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
+                    
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & 
+                                         (df_users['SENHA'] == gerar_hash(senha_login))]
+                    
+                    if not user_match.empty:
+                        if user_match.iloc[0]['STATUS'] == 'Aprovado':
+                            st.session_state.logado = True
+                            st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
+                            st.session_state.user_nome = user_match.iloc[0]['NOME']
+                            st.rerun()
+                        else:
+                            st.error("Seu acesso ainda está PENDENTE de aprovação.")
                     else:
-                        st.error("Seu acesso ainda está PENDENTE de aprovação pelo Administrador.")
-                else:
-                    st.error("Matrícula ou Senha incorretos.")
+                        st.error("Matrícula ou Senha incorretos.")
+                except Exception as e:
+                    st.error(f"Erro ao conectar na base de usuários: {e}")
 
         with aba_cadastro:
             nome_cad = st.text_input("Nome Completo")
@@ -81,17 +87,24 @@ def tela_acesso():
             
             if st.button("Solicitar Acesso"):
                 if nome_cad and mat_cad and senha_cad:
-                    df_users = conn.read(spreadsheet="1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw", worksheet="USUARIOS")
-                    if mat_cad in df_users['MATRICULA'].astype(str).values:
-                        st.warning("Esta matrícula já possui solicitação ou cadastro.")
-                    else:
-                        novo_u = pd.DataFrame([{
-                            "NOME": nome_cad, "MATRICULA": str(mat_cad),
-                            "SENHA": gerar_hash(senha_cad), "NIVEL": "Visitante", "STATUS": "Pendente"
-                        }])
-                        df_updated = pd.concat([df_users, novo_u], ignore_index=True)
-                        conn.update(spreadsheet=1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw, worksheet="USUARIOS", data=df_updated)
-                        st.success("Solicitação enviada! Aguarde a ativação pelo Administrador.")
+                    try:
+                        # Usando a conexão st.connection para gravar (update)
+                        df_users = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+                        if str(mat_cad) in df_users['MATRICULA'].astype(str).values:
+                            st.warning("Esta matrícula já possui cadastro ou solicitação.")
+                        else:
+                            novo_u = pd.DataFrame([{
+                                "NOME": nome_cad, 
+                                "MATRICULA": str(mat_cad),
+                                "SENHA": gerar_hash(senha_cad), 
+                                "NIVEL": "Visitante", 
+                                "STATUS": "Pendente"
+                            }])
+                            df_updated = pd.concat([df_users, novo_u], ignore_index=True)
+                            conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
+                            st.success("Solicitação enviada! Aguarde a ativação.")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar cadastro: {e}")
                 else:
                     st.error("Preencha todos os campos.")
 
@@ -103,11 +116,9 @@ if not st.session_state.logado:
     tela_acesso()
 else:
     # --- BARRA LATERAL ---
-    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-    st.sidebar.title(f"Bem-vindo, {st.session_state.user_nome}")
+    st.sidebar.title(f"👤 {st.session_state.user_nome}")
     st.sidebar.write(f"Nível: **{st.session_state.user_nivel}**")
     
-    # Opções do Menu baseadas no Nível
     opcoes_menu = ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         opcoes_menu.append("⚙️ CONFIGURAÇÕES")
@@ -119,20 +130,13 @@ else:
         st.rerun()
 
     # --- NAVEGAÇÃO ENTRE PÁGINAS ---
-    
+    # Aqui você deve inserir as lógicas das páginas que já fizemos
     if menu == "1. VISÃO GERAL":
         st.title("📊 Visão Geral do Monitoramento")
-        # COLOQUE AQUI O SEU CÓDIGO DA VISÃO GERAL...
-
-    elif menu == "2. CASOS POR ÁREA":
-        st.title("📍 Análise Regional")
-        # COLOQUE AQUI O SEU CÓDIGO DE CASOS POR ÁREA...
+        # Insira o código dos cards e gráficos aqui...
 
     elif menu == "⚙️ CONFIGURAÇÕES":
-        st.title("⚙️ Painel do Administrador (Master)")
-        # AQUI VAI O CÓDIGO DE APROVAÇÃO QUE TE MANDEI ANTES
-        # (Ler a planilha, mostrar pendentes e botões de Aprovar/Rejeitar)
-
-    elif menu == "4. ASSISTENTE IA":
-        # AQUI VAI O CÓDIGO DO ANALISTA VIRTUAL...
-        pass
+        st.title("⚙️ Gestão de Acessos")
+        # Código para o Master aprovar usuários...
+        df_adm = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+        st.dataframe(df_adm)
