@@ -86,10 +86,16 @@ def tela_acesso():
             senha_login = st.text_input("Senha", type="password", key="login_pass")
             if st.button("Acessar Painel"):
                 try:
-                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/export?format=csv&gid=0"
+                    # Forçando a leitura da aba 'USUARIOS' via CSV
+                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
                     df_users = pd.read_csv(url_users)
+                    
+                    df_users.columns = [str(col).strip().upper() for col in df_users.columns]
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str)
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & (df_users['SENHA'] == gerar_hash(senha_login))]
+                    
+                    # Criptografia e Comparação
+                    senha_digitada_hash = gerar_hash(senha_login)
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login) & (df_users['SENHA'] == senha_digitada_hash)]
                     if not user_match.empty:
                         if user_match.iloc[0]['STATUS'] == 'Aprovado':
                             st.session_state.logado = True
