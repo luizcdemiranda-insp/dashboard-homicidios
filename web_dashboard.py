@@ -239,10 +239,59 @@ else:
 
     if menu == "1. VISÃO GERAL":
         st.header("📊 VISÃO GERAL")
+        
+        # Prepara os dados de Ano
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        ano_sel = st.selectbox("ANO DE REFERÊNCIA:", anos_disp)
-        gerar_dashboard(df[df['ANO'] == ano_sel])
+        
+        # --- FILTROS DE ANO ---
+        st.subheader("FILTROS DE ANÁLISE")
+        modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
+
+        anos_selecionados = []
+        
+        if modo_analise == "ANÁLISE INDIVIDUAL":
+            col_drop, _ = st.columns([2, 8]) 
+            ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind_vg")
+            anos_selecionados = [ano_escolhido]
+            
+        else:
+            st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
+            
+            # Funções dos botões rápidos
+            def selecionar_todos_vg():
+                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
+            def limpar_selecao_vg():
+                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
+
+            # Inicializa os botões (checkbox) no sistema para não dar erro
+            for ano in anos_disp:
+                if f"chk_vg_{ano}" not in st.session_state:
+                    st.session_state[f"chk_vg_{ano}"] = True
+
+            # Botões de ação rápida
+            b1, b2, _ = st.columns([2, 2, 6])
+            b1.button("✓ Todos os anos", on_click=selecionar_todos_vg, key="btn_all_vg")
+            b2.button("✗ Limpar seleção", on_click=limpar_selecao_vg, key="btn_clear_vg")
+            
+            # Desenha os botões de cada ano lado a lado
+            colunas_anos = st.columns(min(len(anos_disp), 8) or 1, gap="small")
+            for i, ano in enumerate(anos_disp):
+                colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_vg_{ano}")
+            
+            # Descobre quais estão marcados
+            anos_selecionados = [ano for ano in anos_disp if st.session_state.get(f"chk_vg_{ano}", False)]
+
+        # --- GERAÇÃO DOS GRÁFICOS ---
+        if len(anos_selecionados) > 0:
+            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
+            st.write("---")
+            if df_filtrado.empty:
+                st.warning("Nenhuma ocorrência encontrada para os anos selecionados.")
+            else:
+                gerar_dashboard(df_filtrado)
+        else:
+            st.warning("⚠️ Selecione pelo menos um ano para visualizar os dados.")
 
     elif menu == "2. CASOS POR ÁREA":
         st.header("🗺️ CASOS POR ÁREA")
