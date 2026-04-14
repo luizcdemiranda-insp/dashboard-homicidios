@@ -14,7 +14,7 @@ st.set_page_config(page_title="🛡️ Monitoramento de Homicídios", layout="wi
 ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 ID_PLANILHA_CRIMES = "1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc"
 
-# --- CSS PERSONALIZADO (Design de Ontem) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
     div[role="radiogroup"] > label > div:first-child,
@@ -73,7 +73,7 @@ def carregar_dados():
     return df
 
 # =====================================================================
-# 3. INTERFACE DE ACESSO (CORRIGIDA)
+# 3. INTERFACE DE ACESSO
 # =====================================================================
 def tela_acesso():
     col_esq, col_meio, col_dir = st.columns([1, 4, 1])
@@ -82,31 +82,22 @@ def tela_acesso():
         aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Solicitar Cadastro"])
         
         with aba_login:
-            mat_login = st.text_input("Matrícula", key="login_mat")
-            senha_login = st.text_input("Senha", type="password", key="login_pass")
+            mat_login = st.text_input("Matrícula", key="login_mat_input")
+            senha_login = st.text_input("Senha", type="password", key="login_pass_input")
             
             if st.button("Acessar Painel"):
                 try:
-                    # Link de exportação direta da aba USUARIOS
                     url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
                     df_users = pd.read_csv(url_users)
                     
-                    # Padronização de colunas (Remove espaços e coloca em maiúsculo)
                     df_users.columns = [str(col).strip().upper() for col in df_users.columns]
-                    
-                    # Converte matrícula para string e limpa espaços
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
                     mat_login_limpa = str(mat_login).strip()
                     
-                    # Criptografia da senha digitada
                     senha_hash = gerar_hash(senha_login)
-                    
-                    # Busca o usuário
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & 
-                                         (df_users['SENHA'] == senha_hash)]
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & (df_users['SENHA'] == senha_hash)]
                     
                     if not user_match.empty:
-                        # Verifica o Status (Aprovado / Pendente)
                         status = str(user_match.iloc[0]['STATUS']).strip().upper()
                         if status == 'APROVADO':
                             st.session_state.logado = True
@@ -114,53 +105,39 @@ def tela_acesso():
                             st.session_state.user_nome = user_match.iloc[0]['NOME']
                             st.rerun()
                         else:
-                            st.error(f"Acesso negado. Seu status atual é: {status}")
+                            st.warning(f"Acesso Pendente. Status atual: {status}")
                     else:
-                        st.error("Matrícula ou Senha inválidos.")
+                        st.error("Matrícula ou Senha incorretos.")
                 except Exception as e:
-                    st.error("⚠️ Erro de conexão com a base de usuários.")
-                    st.info("Certifique-se de que a planilha de acesso está compartilhada como 'Qualquer pessoa com o link'.")
+                    st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
 
         with aba_cadastro:
-            n_cad = st.text_input("Nome Completo", key="cad_nome")
-            m_cad = st.text_input("Matrícula", key="cad_mat")
-            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass")
+            n_cad = st.text_input("Nome Completo", key="cad_nome_input")
+            m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
             
             if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     try:
                         df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-                        if str(m_cad) in df_u['MATRICULA'].astype(str).values:
-                            st.warning("Esta matrícula já possui cadastro.")
+                        if str(m_cad).strip() in df_u['MATRICULA'].astype(str).str.strip().values:
+                            st.warning("Matrícula já possui solicitação.")
                         else:
                             novo = pd.DataFrame([{
                                 "NOME": n_cad, 
-                                "MATRICULA": str(m_cad), 
+                                "MATRICULA": str(m_cad).strip(), 
                                 "SENHA": gerar_hash(s_cad), 
                                 "NIVEL": "Visitante", 
                                 "STATUS": "Pendente"
                             }])
-                            df_updated = pd.concat([df_users if 'df_users' in locals() else df_u, novo], ignore_index=True)
+                            df_updated = pd.concat([df_u, novo], ignore_index=True)
                             conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
                             st.success("Solicitação enviada com sucesso!")
-                    except:
-                        st.error("Erro ao gravar cadastro. Verifique as permissões da planilha.")
-
-        with aba_cadastro:
-            n_cad = st.text_input("Nome Completo", key="cad_nome")
-            m_cad = st.text_input("Matrícula", key="cad_mat") # O KEY resolve o erro de ID duplicado
-            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass")
-            if st.button("Enviar Solicitação"):
-                if n_cad and m_cad and s_cad:
-                    df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-                    if str(m_cad) in df_u['MATRICULA'].astype(str).values: st.warning("Matrícula já cadastrada.")
-                    else:
-                        novo = pd.DataFrame([{"NOME": n_cad, "MATRICULA": str(m_cad), "SENHA": gerar_hash(s_cad), "NIVEL": "Visitante", "STATUS": "Pendente"}])
-                        conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=pd.concat([df_u, novo], ignore_index=True))
-                        st.success("Solicitação enviada! Aguarde a liberação.")
+                    except Exception as e:
+                        st.error(f"Erro ao gravar dados: {e}")
 
 # =====================================================================
-# 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD (MÃE)
+# 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
 # =====================================================================
 def gerar_dashboard(df_filtrado):
     COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
@@ -186,15 +163,17 @@ def gerar_dashboard(df_filtrado):
         if COL_DIA:
             tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
             tabela_dia = tabela_dia[~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)]
-            grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350)
-            st.altair_chart(grafico_dia, use_container_width=True)
+            if not tabela_dia.empty:
+                grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350)
+                st.altair_chart(grafico_dia, use_container_width=True)
 
     with col2:
         st.markdown("### 🗺️ POR CIRCUNSCRIÇÃO")
         if COL_CIRCUNSCRICAO:
             tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
-            grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350)
-            st.altair_chart(grafico_circ, use_container_width=True)
+            if not tabela_circ.empty:
+                grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350)
+                st.altair_chart(grafico_circ, use_container_width=True)
 
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
@@ -204,7 +183,7 @@ if not st.session_state.logado:
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
     
-    lista_menu = ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MOTIVAÇÃO / DELITO", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
+    lista_menu = ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         lista_menu.append("⚙️ CONFIGURAÇÕES")
         
@@ -219,18 +198,31 @@ else:
         st.header("📊 VISÃO GERAL")
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        ano_sel = st.selectbox("ANO:", anos_disp)
+        ano_sel = st.selectbox("ANO DE REFERÊNCIA:", anos_disp)
         gerar_dashboard(df[df['ANO'] == ano_sel])
 
     elif menu == "2. CASOS POR ÁREA":
         st.header("🗺️ CASOS POR ÁREA")
-        # Aqui você pode colar a lógica de filtros de ÁREA de ontem
-        st.write("Selecione os filtros de área no Modo Comparativo.")
+        st.info("Página de Áreas preservada para integração dos filtros.")
 
-    elif menu == "5. ASSISTENTE IA":
+    elif menu == "3. MODO ANALÍTICO":
+        st.header("📑 MODO ANALÍTICO")
+        st.dataframe(df)
+
+    elif menu == "4. ASSISTENTE IA":
         st.header("🤖 Analista Criminal Virtual")
-        # Lógica da IA preservada
         api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
         if api_key:
-            genai.configure(api_key=api_key)
-            st.info("Sistemas de IA prontos.")
+            try:
+                genai.configure(api_key=api_key)
+                st.success("Sistemas de IA prontos. Insira a lógica do chat aqui.")
+            except:
+                st.error("Erro na chave de API.")
+
+    elif menu == "⚙️ CONFIGURAÇÕES":
+        st.header("⚙️ Painel do Administrador")
+        try:
+            df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+            st.dataframe(df_u)
+        except Exception as e:
+            st.error(f"Erro ao carregar usuários: {e}")
