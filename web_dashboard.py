@@ -335,109 +335,23 @@ elif menu == "2. CASOS POR ÁREA":
                 gerar_dashboard(df_filtrado)
 
 # --- Outras Páginas ---
+
+
 # =====================================================================
-# 7. PÁGINA: MOTIVAÇÃO / DELITO (VERSÃO CORREÇÃO ATTRIBUTE ERROR)
+# 7. PÁGINA: MOTIVAÇÃO / DELITO (MODO ESPERA)
 # =====================================================================
 elif menu == "3. MOTIVAÇÃO / DELITO":
-    st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO E DELITO")
+    st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO")
     
-    try:
-        df = carregar_dados()
-        df = df.dropna(subset=['ANO'])
-        df['ANO'] = df['ANO'].astype(int).astype(str)
-        anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
-
-        st.subheader("FILTROS DE ANÁLISE")
-        modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_motivo")
-
-        anos_selecionados = []
-        if modo_analise == "ANÁLISE INDIVIDUAL":
-            col_drop, _ = st.columns([2, 8]) 
-            ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis, key="ano_motivo_ind")
-            anos_selecionados = [ano_escolhido]
-        else:
-            st.write("**SELECIONE OS ANOS:**")
-            col_btn1, col_btn2, _ = st.columns([2, 2, 6])
-            if col_btn1.button("✓ Todos", key="all_mot"):
-                for a in anos_disponiveis: st.session_state[f"chk_mot_{a}"] = True
-            if col_btn2.button("✗ Limpar", key="none_mot"):
-                for a in anos_disponiveis: st.session_state[f"chk_mot_{a}"] = False
-
-            for a in anos_disponiveis:
-                if f"chk_mot_{a}" not in st.session_state: st.session_state[f"chk_mot_{a}"] = True
-            
-            cols = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
-            for i, a in enumerate(anos_disponiveis):
-                cols[i % 8].checkbox(a, key=f"chk_mot_{a}")
-            anos_selecionados = [a for a in anos_disponiveis if st.session_state.get(f"chk_mot_{a}", False)]
-
-        if anos_selecionados:
-            df_motivo = df[df['ANO'].isin(anos_selecionados)].copy()
-            
-            # Busca inteligente e segura de colunas
-            # Usamos o primeiro nome encontrado que contenha a palavra chave
-            col_motivo = next((c for c in df_motivo.columns if "MOTIVO" in str(c) or "MOTIVAÇÃO" in str(c)), None)
-            col_meio = next((c for c in df_motivo.columns if "MEIO" in str(c) or "INSTRUMENTO" in str(c)), None)
-
-            st.write("---")
-            
-            if not col_motivo and not col_meio:
-                st.warning("⚠️ Não foram encontradas colunas de 'MOTIVO' ou 'MEIO'.")
-            else:
-                col_esq, col_dir = st.columns(2)
-
-                with col_esq:
-                    st.markdown("### 🎯 PRINCIPAIS MOTIVAÇÕES")
-                    if col_motivo:
-                        # USANDO .loc[:, col_motivo] PARA EVITAR ATTRIBUTE ERROR
-                        # Isso força o Pandas a entender que estamos pegando a coluna pelo nome
-                        raw_motivo = df_motivo.loc[:, col_motivo]
-                        
-                        # Limpeza robusta
-                        dados_motivo = raw_motivo.astype(str).str.strip().str.upper()
-                        dados_motivo = dados_motivo[~dados_motivo.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
-                        
-                        if not dados_motivo.empty:
-                            tabela_motivo = dados_motivo.value_counts().reset_index()
-                            tabela_motivo.columns = ['MOTIVO', 'TOTAL']
-                            
-                            grafico_motivo = alt.Chart(tabela_motivo.head(10)).mark_arc(innerRadius=50).encode(
-                                theta="TOTAL:Q", 
-                                color=alt.Color("MOTIVO:N", legend=alt.Legend(title="Motivo")),
-                                tooltip=['MOTIVO', 'TOTAL']
-                            ).properties(height=400)
-                            st.altair_chart(grafico_motivo, use_container_width=True)
-                        else:
-                            st.info("Dados de motivação estão vazios.")
-                    else:
-                        st.info("Coluna de Motivação não encontrada.")
-
-                with col_dir:
-                    st.markdown("### 🔪 MEIO EMPREGADO")
-                    if col_meio:
-                        # USANDO .loc[:, col_meio] PARA EVITAR ATTRIBUTE ERROR
-                        raw_meio = df_motivo.loc[:, col_meio]
-                        
-                        dados_meio = raw_meio.astype(str).str.strip().str.upper()
-                        dados_meio = dados_meio[~dados_meio.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
-                        
-                        if not dados_meio.empty:
-                            tabela_meio = dados_meio.value_counts().reset_index()
-                            tabela_meio.columns = ['MEIO', 'TOTAL']
-                            
-                            grafico_meio = alt.Chart(tabela_meio.head(10)).mark_bar(color='#ff4b4b').encode(
-                                x='TOTAL:Q', 
-                                y=alt.Y('MEIO:N', sort='-x', title=''), 
-                                tooltip=['MEIO', 'TOTAL']
-                            ).properties(height=400)
-                            st.altair_chart(grafico_meio, use_container_width=True)
-                        else:
-                            st.info("Dados de meio empregado estão vazios.")
-                    else:
-                        st.info("Coluna de Meio Empregado não encontrada.")
-
-    except Exception as e:
-        st.error(f"Erro técnico na página de Motivação: {e}")
+    st.markdown("""
+    <div style="background-color: #1E2130; padding: 40px; border-radius: 15px; border-left: 5px solid #F1C40F; text-align: center;">
+        <h2 style="color: white; margin: 0;">🚧 Página em Desenvolvimento</h2>
+        <p style="color: #b0b4c4; font-size: 18px; margin-top: 15px;">
+            Esta seção está reservada para as análises detalhadas de motivação criminal e instrumentos utilizados.
+        </p>
+        <p style="color: #ff4b4b; font-weight: bold;">As outras abas continuam operando normalmente!</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # =====================================================================
 # 6. PÁGINA: ASSISTENTE IA (VERSÃO COM BUSCA AUTOMÁTICA DE MODELO)
@@ -507,6 +421,7 @@ elif menu == "5. ASSISTENTE IA":
             st.error(f"Erro de Conexão: {e}")
             if "404" in str(e):
                 st.info("Tente atualizar sua biblioteca: pip install -U google-generativeai")
+
 
 
 
