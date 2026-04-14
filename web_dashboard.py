@@ -336,20 +336,13 @@ elif menu == "2. CASOS POR ÁREA":
 
 # --- Outras Páginas ---
 # =====================================================================
-# 7. PÁGINA: MOTIVAÇÃO / DELITO
+# 7. PÁGINA: MOTIVAÇÃO / DELITO (VERSÃO CORREÇÃO ATTRIBUTE ERROR)
 # =====================================================================
 elif menu == "3. MOTIVAÇÃO / DELITO":
     st.header("🔍 DETALHAMENTO DE MOTIVAÇÃO E DELITO")
     
-    with st.spinner("Carregando inteligência de dados..."):
-        try:
-            df = carregar_dados()
-            sucesso_dados = True
-        except Exception as e:
-            st.error(f"Erro ao carregar dados: {e}")
-            sucesso_dados = False
-
-    if sucesso_dados:
+    try:
+        df = carregar_dados()
         df = df.dropna(subset=['ANO'])
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disponiveis = sorted(df['ANO'].unique().tolist(), reverse=True)
@@ -363,7 +356,6 @@ elif menu == "3. MOTIVAÇÃO / DELITO":
             ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disponiveis, key="ano_motivo_ind")
             anos_selecionados = [ano_escolhido]
         else:
-            # Usando a mesma lógica de botões que você gostou
             st.write("**SELECIONE OS ANOS:**")
             col_btn1, col_btn2, _ = st.columns([2, 2, 6])
             if col_btn1.button("✓ Todos", key="all_mot"):
@@ -374,74 +366,78 @@ elif menu == "3. MOTIVAÇÃO / DELITO":
             for a in anos_disponiveis:
                 if f"chk_mot_{a}" not in st.session_state: st.session_state[f"chk_mot_{a}"] = True
             
-            cols = st.columns(8, gap="small")
+            cols = st.columns(min(len(anos_disponiveis), 8) or 1, gap="small")
             for i, a in enumerate(anos_disponiveis):
                 cols[i % 8].checkbox(a, key=f"chk_mot_{a}")
-            anos_selecionados = [a for a in anos_disponiveis if st.session_state[f"chk_mot_{a}"]]
+            anos_selecionados = [a for a in anos_disponiveis if st.session_state.get(f"chk_mot_{a}", False)]
 
         if anos_selecionados:
             df_motivo = df[df['ANO'].isin(anos_selecionados)].copy()
             
-            # --- IDENTIFICAÇÃO DE COLUNAS ---
-            # Vamos buscar colunas que falem de MOTIVO ou MEIO
-            col_motivo = next((c for c in df.columns if "MOTIVO" in c or "MOTIVAÇÃO" in c), None)
-            col_meio = next((c for c in df.columns if "MEIO" in c or "INSTRUMENTO" in c), None)
+            # Busca inteligente e segura de colunas
+            # Usamos o primeiro nome encontrado que contenha a palavra chave
+            col_motivo = next((c for c in df_motivo.columns if "MOTIVO" in str(c) or "MOTIVAÇÃO" in str(c)), None)
+            col_meio = next((c for c in df_motivo.columns if "MEIO" in str(c) or "INSTRUMENTO" in str(c)), None)
 
             st.write("---")
             
-            col_esq, col_dir = st.columns(2)
+            if not col_motivo and not col_meio:
+                st.warning("⚠️ Não foram encontradas colunas de 'MOTIVO' ou 'MEIO'.")
+            else:
+                col_esq, col_dir = st.columns(2)
 
-            with col_esq:
-                st.markdown("### 🎯 PRINCIPAIS MOTIVAÇÕES")
-                if col_motivo:
-                    # Limpeza e contagem
-                    dados_motivo = df_motivo[col_motivo].astype(str).str.strip().upper()
-                    dados_motivo = dados_motivo[~dados_motivo.isin(["NAN", "NONE", "", "-"])]
-                    tabela_motivo = dados_motivo.value_counts().reset_index()
-                    tabela_motivo.columns = ['MOTIVO', 'TOTAL']
+                with col_esq:
+                    st.markdown("### 🎯 PRINCIPAIS MOTIVAÇÕES")
+                    if col_motivo:
+                        # USANDO .loc[:, col_motivo] PARA EVITAR ATTRIBUTE ERROR
+                        # Isso força o Pandas a entender que estamos pegando a coluna pelo nome
+                        raw_motivo = df_motivo.loc[:, col_motivo]
+                        
+                        # Limpeza robusta
+                        dados_motivo = raw_motivo.astype(str).str.strip().str.upper()
+                        dados_motivo = dados_motivo[~dados_motivo.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
+                        
+                        if not dados_motivo.empty:
+                            tabela_motivo = dados_motivo.value_counts().reset_index()
+                            tabela_motivo.columns = ['MOTIVO', 'TOTAL']
+                            
+                            grafico_motivo = alt.Chart(tabela_motivo.head(10)).mark_arc(innerRadius=50).encode(
+                                theta="TOTAL:Q", 
+                                color=alt.Color("MOTIVO:N", legend=alt.Legend(title="Motivo")),
+                                tooltip=['MOTIVO', 'TOTAL']
+                            ).properties(height=400)
+                            st.altair_chart(grafico_motivo, use_container_width=True)
+                        else:
+                            st.info("Dados de motivação estão vazios.")
+                    else:
+                        st.info("Coluna de Motivação não encontrada.")
 
-                    grafico_motivo = alt.Chart(tabela_motivo.head(10)).mark_arc(innerRadius=50).encode(
-                        theta=alt.Theta(field="TOTAL", type="quantitative"),
-                        color=alt.Color(field="MOTIVO", type="nominal", legend=alt.Legend(title="Motivo")),
-                        tooltip=['MOTIVO', 'TOTAL']
-                    ).properties(height=400)
-                    st.altair_chart(grafico_motivo, use_container_width=True)
-                else:
-                    st.info("Coluna de Motivação não identificada na planilha.")
+                with col_dir:
+                    st.markdown("### 🔪 MEIO EMPREGADO")
+                    if col_meio:
+                        # USANDO .loc[:, col_meio] PARA EVITAR ATTRIBUTE ERROR
+                        raw_meio = df_motivo.loc[:, col_meio]
+                        
+                        dados_meio = raw_meio.astype(str).str.strip().str.upper()
+                        dados_meio = dados_meio[~dados_meio.isin(["NAN", "NONE", "", "-", " ", "0", "0.0"])]
+                        
+                        if not dados_meio.empty:
+                            tabela_meio = dados_meio.value_counts().reset_index()
+                            tabela_meio.columns = ['MEIO', 'TOTAL']
+                            
+                            grafico_meio = alt.Chart(tabela_meio.head(10)).mark_bar(color='#ff4b4b').encode(
+                                x='TOTAL:Q', 
+                                y=alt.Y('MEIO:N', sort='-x', title=''), 
+                                tooltip=['MEIO', 'TOTAL']
+                            ).properties(height=400)
+                            st.altair_chart(grafico_meio, use_container_width=True)
+                        else:
+                            st.info("Dados de meio empregado estão vazios.")
+                    else:
+                        st.info("Coluna de Meio Empregado não encontrada.")
 
-            with col_dir:
-                st.markdown("### 🔪 MEIO EMPREGADO / INSTRUMENTO")
-                if col_meio:
-                    dados_meio = df_motivo[col_meio].astype(str).str.strip().upper()
-                    dados_meio = dados_meio[~dados_meio.isin(["NAN", "NONE", "", "-"])]
-                    tabela_meio = dados_meio.value_counts().reset_index()
-                    tabela_meio.columns = ['MEIO', 'TOTAL']
-
-                    grafico_meio = alt.Chart(tabela_meio.head(10)).mark_bar(color='#ff4b4b').encode(
-                        x=alt.X('TOTAL:Q', title='Quantidade'),
-                        y=alt.Y('MEIO:N', sort='-x', title=''),
-                        tooltip=['MEIO', 'TOTAL']
-                    ).properties(height=400)
-                    st.altair_chart(grafico_meio, use_container_width=True)
-                else:
-                    st.info("Coluna de Meio Empregado não identificada.")
-
-            # --- TABELA DE DETALHAMENTO ---
-            st.write("---")
-            with st.expander("📄 Ver detalhamento textual das motivações"):
-                colunas_ver = [c for c in [col_motivo, col_meio, 'ANO'] if c is not None]
-                st.dataframe(df_motivo[colunas_ver], use_container_width=True)
-
-elif menu == "4. MODO ANALÍTICO":
-    st.header("MODO ANALÍTICO")
-    try:
-        with st.spinner("Carregando tabela completa..."):
-            df_raiox = carregar_dados()
-            colunas_limpas = [col for col in df_raiox.columns if "NEUTRA" not in str(col)]
-            df_limpo = df_raiox[colunas_limpas]
-            st.dataframe(df_limpo)
     except Exception as e:
-        st.error(f"Erro ao gerar a tabela: {e}")
+        st.error(f"Erro técnico na página de Motivação: {e}")
 
 # =====================================================================
 # 6. PÁGINA: ASSISTENTE IA (VERSÃO COM BUSCA AUTOMÁTICA DE MODELO)
@@ -511,5 +507,6 @@ elif menu == "5. ASSISTENTE IA":
             st.error(f"Erro de Conexão: {e}")
             if "404" in str(e):
                 st.info("Tente atualizar sua biblioteca: pip install -U google-generativeai")
+
 
 
