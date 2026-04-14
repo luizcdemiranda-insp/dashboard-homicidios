@@ -4,6 +4,9 @@ import altair as alt
 import hashlib
 import google.generativeai as genai
 from streamlit_gsheets import GSheetsConnection
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
