@@ -351,7 +351,7 @@ elif menu == "4. MODO ANALÍTICO":
         st.error(f"Erro ao gerar a tabela: {e}")
 
 # =====================================================================
-# 6. PÁGINA: ASSISTENTE IA (VERSÃO RECURSOS TOTAIS)
+# 6. PÁGINA: ASSISTENTE IA (VERSÃO CORRIGIDA E BLINDADA)
 # =====================================================================
 elif menu == "5. ASSISTENTE IA":
     st.header("🤖 Analista Criminal Virtual")
@@ -367,14 +367,12 @@ elif menu == "5. ASSISTENTE IA":
         st.info("Se precisar de uma chave nova: [Google AI Studio](https://aistudio.google.com/app/apikey)")
     else:
         try:
-            # .strip() remove espaços acidentais antes ou depois da chave
+            # 1. Configuração Inicial
             chave_limpa = api_key_input.strip()
             genai.configure(api_key=chave_limpa)
             
-            # Carrega dados para contexto
+            # 2. Preparação do Contexto
             df_contexto = carregar_dados()
-            
-            # Instruções de comportamento da IA
             instrucoes = (
                 "Você é um analista criminal sênior. "
                 f"Você tem acesso a um banco de dados com {len(df_contexto)} registros. "
@@ -382,23 +380,23 @@ elif menu == "5. ASSISTENTE IA":
                 "Responda de forma técnica, objetiva e baseada em inteligência policial."
             )
             
-           # Tente esta linha primeiro (Endereço Completo):
-model = genai.GenerativeModel('models/gemini-1.5-flash', system_instruction=instrucoes)
-
-# SE O ERRO PERSISTIR, use esta versão Pro (que é mais estável para chaves novas):
-# model = genai.GenerativeModel('models/gemini-1.5-pro', system_instruction=instrucoes)
+            # 3. Definição do Modelo (Usando o caminho estável)
+            model = genai.GenerativeModel('models/gemini-1.5-flash', system_instruction=instrucoes)
             
+            # 4. Gerenciamento do Chat
             if "chat_gemini" not in st.session_state:
                 st.session_state.chat_gemini = model.start_chat(history=[])
                 st.session_state.mensagens_front = [
                     {"role": "model", "content": "Sistemas prontos. Como posso auxiliar na análise dos dados hoje?"}
                 ]
             
+            # Exibição das Mensagens
             for msg in st.session_state.mensagens_front:
                 role_tela = "assistant" if msg["role"] == "model" else "user" 
                 with st.chat_message(role_tela):
                     st.markdown(msg["content"])
 
+            # Entrada do Usuário
             pergunta = st.chat_input("Digite sua pergunta técnica...")
             
             if pergunta:
@@ -407,15 +405,12 @@ model = genai.GenerativeModel('models/gemini-1.5-flash', system_instruction=inst
                 st.session_state.mensagens_front.append({"role": "user", "content": pergunta})
                 
                 with st.spinner("Processando inteligência..."):
-                    # Enviando para a API
                     response = st.session_state.chat_gemini.send_message(pergunta)
                 
                 with st.chat_message("assistant"):
                     st.markdown(response.text)
                 st.session_state.mensagens_front.append({"role": "model", "content": response.text})
-                
+
         except Exception as e:
             st.error(f"Erro de Conexão: {e}")
-            if "API_KEY_INVALID" in str(e):
-                st.error("Dica: Tente gerar uma nova chave no AI Studio. A chave atual não foi reconhecida pelo Google.")
-
+            st.info("Dica: Verifique se sua chave API é válida e se o modelo 'gemini-1.5-flash' está disponível em sua região.")
