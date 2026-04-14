@@ -11,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Monitoramento Criminal", layout="wide")
 
 # Substitua pelo ID da sua nova planilha de ACESSO
-ID_PLANILHA_ACESSO = 1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw
+ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 
 # Função para criptografar senha
 def gerar_hash(senha):
