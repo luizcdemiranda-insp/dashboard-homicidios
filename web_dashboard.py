@@ -5,6 +5,75 @@ import altair as alt
 # --- IMPORTANTE: Nova biblioteca da Inteligência Artificial ---
 import google.generativeai as genai 
 
+import streamlit as st
+import hashlib
+
+# --- FUNÇÃO DE CRIPTOGRAFIA (Para não salvar senha aberta) ---
+def gerar_hash(senha):
+    return hashlib.sha256(str.encode(senha)).hexdigest()
+
+# --- INICIALIZAÇÃO DE ESTADO ---
+if "logado" not in st.session_state:
+    st.session_state.logado = False
+if "user_nivel" not in st.session_state:
+    st.session_state.user_nivel = None
+if "user_matricula" not in st.session_state:
+    st.session_state.user_matricula = None
+
+# --- TELA DE ACESSO ---
+def tela_acesso():
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    
+    with col_c:
+        st.image("logo1.png", width=200) # Opcional: Centralizar logo
+        st.markdown("<h2 style='text-align: center;'>Acesso ao Sistema</h2>", unsafe_allow_html=True)
+        
+        aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Novo Usuário"])
+        
+        with aba_login:
+            matricula = st.text_input("Matrícula")
+            senha = st.text_input("Senha", type="password")
+            
+            if st.button("Acessar Painel"):
+                # AQUI: Faremos a busca na planilha de usuários
+                # Exemplo temporário para você testar:
+                if matricula == "admin" and senha == "admin":
+                    st.session_state.logado = True
+                    st.session_state.user_nivel = "Master"
+                    st.session_state.user_matricula = "001"
+                    st.rerun()
+                else:
+                    st.error("Matrícula ou senha incorretos, ou acesso ainda não aprovado.")
+
+        with aba_cadastro:
+            st.markdown("### Solicitação de Cadastro")
+            nome_cad = st.text_input("Nome Completo")
+            mat_cad = st.text_input("Matrícula Funcional")
+            senha_cad = st.text_input("Defina uma Senha", type="password")
+            
+            if st.button("Enviar para Aprovação"):
+                if nome_cad and mat_cad and senha_cad:
+                    # AQUI: Código para enviar os dados para a planilha
+                    # Status será 'PENDENTE'
+                    st.success(f"Solicitação enviada, {nome_cad}! Aguarde a liberação do Administrador.")
+                else:
+                    st.warning("Preencha todos os campos.")
+
+# --- LÓGICA DE EXIBIÇÃO ---
+if not st.session_state.logado:
+    tela_acesso()
+else:
+    # AQUI CONTINUA TODO O SEU CÓDIGO DO DASHBOARD...
+    # (Menu Lateral, Visão Geral, IA, etc)
+    
+    # No Menu Lateral, adicionamos o Logout e a Configuração se for Master
+    st.sidebar.markdown(f"👤 **Matrícula:** {st.session_state.user_matricula}")
+    st.sidebar.markdown(f"🔰 **Nível:** {st.session_state.user_nivel}")
+    
+    if st.sidebar.button("Sair / Logout"):
+        st.session_state.logado = False
+        st.rerun()
+
 # 1. Configuração da Página
 st.set_page_config(page_title="Monitoramento de Homicídios", layout="wide")
 
@@ -421,6 +490,7 @@ elif menu == "5. ASSISTENTE IA":
             st.error(f"Erro de Conexão: {e}")
             if "404" in str(e):
                 st.info("Tente atualizar sua biblioteca: pip install -U google-generativeai")
+
 
 
 
