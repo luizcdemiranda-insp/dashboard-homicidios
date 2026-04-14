@@ -121,9 +121,14 @@ def tela_acesso():
             if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     try:
+                        # Lê a base atual
                         df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
+                        
+                        # LIMPEZA DE DEFESA: Remove linhas 100% vazias lidas por engano
+                        df_u = df_u.dropna(how="all")
+                        
                         if str(m_cad).strip() in df_u['MATRICULA'].astype(str).str.strip().values:
-                            st.warning("Matrícula já possui solicitação.")
+                            st.warning("Esta matrícula já possui uma solicitação.")
                         else:
                             novo = pd.DataFrame([{
                                 "NOME": n_cad, 
@@ -132,11 +137,19 @@ def tela_acesso():
                                 "NIVEL": "Visitante", 
                                 "STATUS": "Pendente"
                             }])
+                            
+                            # Junta a base antiga com a nova
                             df_updated = pd.concat([df_u, novo], ignore_index=True)
+                            
+                            # LIMPEZA DE DEFESA 2: Troca qualquer "NaN" fantasma por texto vazio
+                            df_updated = df_updated.fillna("")
+                            
+                            # Grava no Google Sheets
                             conn.update(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", data=df_updated)
-                            st.success("Solicitação enviada com sucesso!")
+                            st.success("Solicitação enviada com sucesso! Aguarde a aprovação do Administrador.")
                     except Exception as e:
                         st.error(f"Erro ao gravar dados: {e}")
+                        st.info("Verifique se a planilha está compartilhada como 'Editor'.")
 
 # =====================================================================
 # 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
