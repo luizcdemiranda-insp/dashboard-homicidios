@@ -80,6 +80,11 @@ def carregar_dados():
 # =====================================================================
 def tela_acesso():
     col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    # =====================================================================
+# 3. INTERFACE DE ACESSO
+# =====================================================================
+def tela_acesso():
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
     with col_meio:
         st.markdown("<h1 style='text-align: center;'>🛡️ ACESSO AO SISTEMA</h1>", unsafe_allow_html=True)
         aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Solicitar Cadastro"])
@@ -112,9 +117,56 @@ def tela_acesso():
                     else:
                         st.error("Matrícula ou Senha incorretos.")
                 except Exception as e:
-                    st.error(f"⚠️ O arquivo foi baixado, mas deu erro ao ler: {e}")
-                    if 'df_users' in locals():
-                        st.info(f"Colunas que o sistema encontrou: {df_users.columns.tolist()}")
+                    st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
+
+        with aba_cadastro:
+            st.markdown("### 📝 Solicitação de Acesso")
+            n_cad = st.text_input("Nome Completo", key="cad_nome_input")
+            m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            
+            if st.button("Enviar Solicitação"):
+                if n_cad and m_cad:
+                    try:
+                        # Configurações do e-mail (pegando do Secrets)
+                        email_remetente = st.secrets["email"]["remetente"]
+                        email_senha = st.secrets["email"]["senha"]
+                        email_destino = "luizcdemiranda.insp@gmail.com"
+
+                        # Criando o corpo do e-mail
+                        corpo = f"""
+                        NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
+                        
+                        Nome: {n_cad}
+                        Matrícula: {m_cad}
+                        
+                        Instruções para o Master:
+                        1. Verifique a identidade do servidor.
+                        2. Acesse a planilha de usuários.
+                        3. Adicione o Nome, Matrícula e gere um hash SHA256 para a senha.
+                        4. Defina o Status como 'Aprovado'.
+                        """
+
+                        msg = MIMEMultipart()
+                        msg['From'] = email_remetente
+                        msg['To'] = email_destino
+                        msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
+                        msg.attach(MIMEText(corpo, 'plain'))
+
+                        # Envio via Servidor Gmail
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login(email_remetente, email_senha)
+                        server.send_message(msg)
+                        server.quit()
+
+                        st.success("✅ Solicitação enviada! Você receberá suas credenciais em breve.")
+                        st.info("O Administrador foi notificado por e-mail para realizar seu cadastro manual.")
+                        
+                    except Exception as e:
+                        st.error(f"Erro ao processar solicitação: {e}")
+                        st.info("Certifique-se de configurar as credenciais de e-mail no painel de Secrets.")
+                else:
+                    st.warning("Por favor, preencha todos os campos.")
 
         with aba_cadastro:
             import smtplib
