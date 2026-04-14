@@ -96,19 +96,40 @@ else:
 
     df = carregar_dados()
 
-    # --- PÁGINA 1: VISÃO GERAL ---
-    if menu == "1. VISÃO GERAL":
-        st.title("📊 Visão Geral")
-        anos = sorted(df['ANO'].dropna().unique().cast(int), reverse=True)
-        ano_sel = st.selectbox("Ano de Referência", anos)
+   if menu == "1. VISÃO GERAL":
+        st.title("📊 Visão Geral do Monitoramento")
+        
+        # Filtro de Ano
+        anos = sorted(df['ANO'].dropna().unique().astype(int), reverse=True)
+        ano_sel = st.sidebar.selectbox("Ano de Referência", anos)
         df_ano = df[df['ANO'] == ano_sel]
+
+        # 1. Cards de Métricas (Estilo ontem)
+        c1, c2, c3, c4 = st.columns(4)
+        total_casos = len(df_ano)
+        # Supondo que as colunas sejam essas, ajuste se os nomes mudarem
+        c1.metric("Total de Casos", total_casos)
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Ocorrências", len(df_ano))
-        # Adicione aqui os demais cards que criamos...
-        
-        grafico = alt.Chart(df_ano).mark_bar().encode(x='count()', y=alt.Y('MUNICIPIO:N', sort='-x'))
-        st.altair_chart(grafico, use_container_width=True)
+        # 2. Gráfico de Linha Mensal
+        st.subheader(f"Tendência Mensal - {ano_sel}")
+        # Criando coluna de mês se não existir para o gráfico
+        if 'MES' in df_ano.columns:
+            df_mes = df_ano.groupby('MES').size().reset_index(name='Casos')
+            chart_linha = alt.Chart(df_mes).mark_line(point=True, color='#ff4b4b').encode(
+                x=alt.X('MES:O', title='Mês'),
+                y=alt.Y('Casos:Q', title='Qtd Ocorrências'),
+                tooltip=['MES', 'Casos']
+            ).properties(height=300)
+            st.altair_chart(chart_linha, use_container_width=True)
+
+        # 3. Gráfico de Municípios
+        st.subheader("Ocorrências por Município")
+        mun_chart = alt.Chart(df_ano).mark_bar().encode(
+            x=alt.X('count()', title='Quantidade'),
+            y=alt.Y('MUNICIPIO:N', sort='-x', title='Cidade'),
+            color=alt.value("#ff4b4b")
+        ).properties(height=400)
+        st.altair_chart(mun_chart, use_container_width=True)
 
     # --- PÁGINA 2: ÁREA ---
     elif menu == "2. CASOS POR ÁREA":
