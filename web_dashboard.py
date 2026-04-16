@@ -323,7 +323,6 @@ if not st.session_state.logado:
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
     
-    # Menu Principal Atualizado
     lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         lista_menu.append("⚙️ CONFIGURAÇÕES")
@@ -332,44 +331,14 @@ else:
 
     # --- LÓGICA DE SUBMENU PARA ORCRIM ---
     sub_menu_orcrim = None
-    # ... (Bloco da Visão Geral mantido acima)
-
-    elif menu == "2. ORCRIM":
-        if sub_menu_orcrim == "ÁREA 1":
-            st.header("📓 ÁREA 1: INTEGRAÇÃO NOTION")
-            st.write("Dados extraídos em tempo real da Central de Inteligência.")
-            
-            with st.spinner("Sincronizando com o Notion..."):
-                df_notion = carregar_dados_notion()
-                
-            if not df_notion.empty:
-                st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
-                st.dataframe(df_notion, use_container_width=True)
-            else:
-                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
-
-        elif sub_menu_orcrim in ["ÁREA 2", "ÁREA 3", "ÁREA 4"]:
-            st.header(f"🗺️ {sub_menu_orcrim}")
-            st.info(f"O painel analítico da {sub_menu_orcrim} está em fase de estruturação de dados.")
-            st.write("Aguardando integração das tabelas correspondentes.")
-
-    # ... (Restante do menu Analítico e IA continua abaixo)
+    if menu == "2. ORCRIM":
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("📂 **SELECIONE A ÁREA:**")
+        sub_menu_orcrim = st.sidebar.radio("", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"], label_visibility="collapsed")
 
     if st.sidebar.button("Sair"):
         st.session_state.logado = False
         st.rerun()
-
-    # Cabeçalho Oficial (Mantido)
-    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-    with col_esq:
-        try: st.image("logo1.png", width=150)
-        except: st.write("")
-    with col_meio:
-        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    with col_dir:
-        try: st.image("logo2.png", width=150)
-        except: st.write("")
-    st.write("---")
 
 # ==========================================================
 # ---> CABEÇALHO OFICIAL (COM LOGOS) <---
@@ -391,11 +360,9 @@ else:
     if menu == "1. VISÃO GERAL":
         st.header("📊 VISÃO GERAL")
         
-        # Prepara os dados de Ano
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
         
-        # --- FILTROS DE ANO ---
         st.subheader("FILTROS DE ANÁLISE")
         modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
 
@@ -409,31 +376,25 @@ else:
         else:
             st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
             
-            # Funções dos botões rápidos
             def selecionar_todos_vg():
                 for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
             def limpar_selecao_vg():
                 for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
 
-            # Inicializa os botões (checkbox) no sistema para não dar erro
             for ano in anos_disp:
                 if f"chk_vg_{ano}" not in st.session_state:
                     st.session_state[f"chk_vg_{ano}"] = True
 
-            # Botões de ação rápida
             b1, b2, _ = st.columns([2, 2, 6])
             b1.button("✓ Todos os anos", on_click=selecionar_todos_vg, key="btn_all_vg")
             b2.button("✗ Limpar seleção", on_click=limpar_selecao_vg, key="btn_clear_vg")
             
-            # Desenha os botões de cada ano lado a lado
             colunas_anos = st.columns(min(len(anos_disp), 8) or 1, gap="small")
             for i, ano in enumerate(anos_disp):
                 colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_vg_{ano}")
             
-            # Descobre quais estão marcados
             anos_selecionados = [ano for ano in anos_disp if st.session_state.get(f"chk_vg_{ano}", False)]
 
-        # --- GERAÇÃO DOS GRÁFICOS ---
         if len(anos_selecionados) > 0:
             df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
             st.write("---")
@@ -444,25 +405,24 @@ else:
         else:
             st.warning("⚠️ Selecione pelo menos um ano para visualizar os dados.")
 
-    elif menu == "2. INTEGRAÇÃO NOTION":
-        st.header("📓 INTEGRAÇÃO EM TEMPO REAL: NOTION")
-        st.write("Dados extraídos diretamente do seu Workspace.")
-        
-        with st.spinner("Estabelecendo conexão segura com o Notion..."):
-            df_notion = carregar_dados_notion()
+    elif menu == "2. ORCRIM":
+        if sub_menu_orcrim == "ÁREA 1":
+            st.header("📓 ÁREA 1: INTEGRAÇÃO NOTION")
+            st.write("Dados extraídos em tempo real da Central de Inteligência.")
             
-        if not df_notion.empty:
-            st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
-            
-            # Mostra os dados em uma tabela interativa
-            st.dataframe(df_notion, use_container_width=True)
-            
-            # Exemplo de como você pode criar métricas rápidas no futuro
-            st.write("---")
-            st.markdown("### 📊 Resumo Rápido")
-            st.info("Abaixo você pode inserir gráficos ou contadores específicos baseados nas colunas da sua tabela do Notion, exatamente como fizemos na Visão Geral!")
-        else:
-            st.warning("A tabela do Notion foi acessada, mas parece estar vazia ou ocorreu um erro de permissão.")
+            with st.spinner("Sincronizando com o Notion..."):
+                df_notion = carregar_dados_notion()
+                
+            if not df_notion.empty:
+                st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
+                st.dataframe(df_notion, use_container_width=True)
+            else:
+                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
+
+        elif sub_menu_orcrim in ["ÁREA 2", "ÁREA 3", "ÁREA 4"]:
+            st.header(f"🗺️ {sub_menu_orcrim}")
+            st.info(f"O painel analítico da {sub_menu_orcrim} está em fase de estruturação de dados.")
+            st.write("Aguardando integração das tabelas correspondentes.")
 
     elif menu == "3. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
