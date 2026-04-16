@@ -323,14 +323,53 @@ if not st.session_state.logado:
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
     
-    lista_menu = ["1. VISÃO GERAL", "2. INTEGRAÇÃO NOTION", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
+    # Menu Principal Atualizado
+    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         lista_menu.append("⚙️ CONFIGURAÇÕES")
         
     menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
+
+    # --- LÓGICA DE SUBMENU PARA ORCRIM ---
+    sub_menu_orcrim = None
+    # ... (Bloco da Visão Geral mantido acima)
+
+    elif menu == "2. ORCRIM":
+        if sub_menu_orcrim == "ÁREA 1":
+            st.header("📓 ÁREA 1: INTEGRAÇÃO NOTION")
+            st.write("Dados extraídos em tempo real da Central de Inteligência.")
+            
+            with st.spinner("Sincronizando com o Notion..."):
+                df_notion = carregar_dados_notion()
+                
+            if not df_notion.empty:
+                st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
+                st.dataframe(df_notion, use_container_width=True)
+            else:
+                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
+
+        elif sub_menu_orcrim in ["ÁREA 2", "ÁREA 3", "ÁREA 4"]:
+            st.header(f"🗺️ {sub_menu_orcrim}")
+            st.info(f"O painel analítico da {sub_menu_orcrim} está em fase de estruturação de dados.")
+            st.write("Aguardando integração das tabelas correspondentes.")
+
+    # ... (Restante do menu Analítico e IA continua abaixo)
+
     if st.sidebar.button("Sair"):
         st.session_state.logado = False
         st.rerun()
+
+    # Cabeçalho Oficial (Mantido)
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_esq:
+        try: st.image("logo1.png", width=150)
+        except: st.write("")
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
+    with col_dir:
+        try: st.image("logo2.png", width=150)
+        except: st.write("")
+    st.write("---")
 
 # ==========================================================
 # ---> CABEÇALHO OFICIAL (COM LOGOS) <---
