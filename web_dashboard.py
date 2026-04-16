@@ -85,7 +85,7 @@ def carregar_dados_notion():
         token = st.secrets["notion"]["token"]
         database_id = st.secrets["notion"]["database_id"]
         
-        url = f"https://api.api.notion.com/v1/databases/{database_id}/query" # Endpoint oficial
+        url = f"https://api.notion.com/v1/databases/{database_id}/query" # Endpoint corrigido
         headers = {
             "Authorization": f"Bearer {token}",
             "Notion-Version": "2022-06-28",
