@@ -7,6 +7,7 @@ from streamlit_gsheets import GSheetsConnection
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import requests
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -75,6 +76,69 @@ def carregar_dados():
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     return df
 
+# =====================================================================
+# 2.5 CARGA DE DADOS DO NOTION
+# =====================================================================
+@st.cache_data(ttl=600) # Atualiza automaticamente a cada 10 minutos
+def carregar_dados_notion():
+    try:
+        token = st.secrets["notion"]["token"]
+        database_id = st.secrets["notion"]["database_id"]
+        
+        url = f"https://api.api.notion.com/v1/databases/{database_id}/query" # Endpoint oficial
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json"
+        }
+        
+        # Envia a tropa para buscar os dados
+        response = requests.post(url, headers=headers)
+        
+        if response.status_code != 200:
+            st.error(f"⚠️ Erro de comunicação com o Notion: {response.text}")
+            return pd.DataFrame()
+            
+        dados_brutos = response.json().get("results", [])
+        linhas = []
+        
+        # O Notion entrega os dados "empacotados". Aqui nós desempacotamos coluna por coluna:
+        for item in dados_brutos:
+            props = item.get("properties", {})
+            linha = {}
+            for nome_coluna, dados_coluna in props.items():
+                tipo = dados_coluna.get("type")
+                
+                if tipo == "title":
+                    vals = dados_coluna.get("title", [])
+                    linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
+                elif tipo == "rich_text":
+                    vals = dados_coluna.get("rich_text", [])
+                    linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
+                elif tipo == "select":
+                    val = dados_coluna.get("select")
+                    linha[nome_coluna] = val.get("name") if val else ""
+                elif tipo == "multi_select":
+                    vals = dados_coluna.get("multi_select", [])
+                    linha[nome_coluna] = ", ".join([v.get("name") for v in vals])
+                elif tipo == "number":
+                    linha[nome_coluna] = dados_coluna.get("number")
+                elif tipo == "date":
+                    val = dados_coluna.get("date")
+                    linha[nome_coluna] = val.get("start") if val else ""
+                elif tipo == "checkbox":
+                    linha[nome_coluna] = dados_coluna.get("checkbox")
+                else:
+                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                    
+            linhas.append(linha)
+            
+        return pd.DataFrame(linhas)
+        
+    except Exception as e:
+        st.error(f"Erro no sistema de extração do Notion: {e}")
+        return pd.DataFrame()
+        
 # =====================================================================
 # 3. INTERFACE DE ACESSO
 # =====================================================================
@@ -259,7 +323,7 @@ if not st.session_state.logado:
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
     
-    lista_menu = ["1. VISÃO GERAL", "2. CASOS POR ÁREA", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
+    lista_menu = ["1. VISÃO GERAL", "2. INTEGRAÇÃO NOTION", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         lista_menu.append("⚙️ CONFIGURAÇÕES")
         
@@ -341,9 +405,25 @@ else:
         else:
             st.warning("⚠️ Selecione pelo menos um ano para visualizar os dados.")
 
-    elif menu == "2. CASOS POR ÁREA":
-        st.header("🗺️ CASOS POR ÁREA")
-        st.info("Página de Áreas preservada para integração dos filtros.")
+    elif menu == "2. INTEGRAÇÃO NOTION":
+        st.header("📓 INTEGRAÇÃO EM TEMPO REAL: NOTION")
+        st.write("Dados extraídos diretamente do seu Workspace.")
+        
+        with st.spinner("Estabelecendo conexão segura com o Notion..."):
+            df_notion = carregar_dados_notion()
+            
+        if not df_notion.empty:
+            st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
+            
+            # Mostra os dados em uma tabela interativa
+            st.dataframe(df_notion, use_container_width=True)
+            
+            # Exemplo de como você pode criar métricas rápidas no futuro
+            st.write("---")
+            st.markdown("### 📊 Resumo Rápido")
+            st.info("Abaixo você pode inserir gráficos ou contadores específicos baseados nas colunas da sua tabela do Notion, exatamente como fizemos na Visão Geral!")
+        else:
+            st.warning("A tabela do Notion foi acessada, mas parece estar vazia ou ocorreu um erro de permissão.")
 
     elif menu == "3. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
