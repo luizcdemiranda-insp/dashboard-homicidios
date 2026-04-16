@@ -407,7 +407,7 @@ else:
 
     elif menu == "2. ORCRIM":
         if sub_menu_orcrim == "ÁREA 1":
-            st.header("📓 ÁREA 1: INTEGRAÇÃO NOTION")
+            st.header("📓 ÁREA 1")
             st.write("Dados extraídos em tempo real da Central de Inteligência.")
             
             with st.spinner("Sincronizando com o Notion..."):
@@ -415,7 +415,45 @@ else:
                 
             if not df_notion.empty:
                 st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
-                st.dataframe(df_notion, use_container_width=True)
+                
+                # --- GAVETA DE FILTROS INTELIGENTES ---
+                with st.expander("🔍 FILTROS AVANÇADOS", expanded=True):
+                    # O código procura colunas que contenham essas palavras-chave
+                    col_atuacao = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
+                    col_funcao = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
+                    col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORGANIZACAO" in c.upper() or "ORCRIM" in c.upper()), None)
+                    
+                    # Cria uma cópia para receber os filtros sem alterar o original
+                    df_filtrado_notion = df_notion.copy()
+                    
+                    # Cria 3 colunas para colocar as caixas de seleção lado a lado
+                    c1, c2, c3 = st.columns(3)
+                    
+                    if col_atuacao:
+                        lista_atuacao = df_notion[col_atuacao].dropna().unique().tolist()
+                        sel_atuacao = c1.multiselect(f"Filtrar por {col_atuacao}:", lista_atuacao)
+                        if sel_atuacao:
+                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_atuacao].isin(sel_atuacao)]
+                            
+                    if col_funcao:
+                        lista_funcao = df_notion[col_funcao].dropna().unique().tolist()
+                        sel_funcao = c2.multiselect(f"Filtrar por {col_funcao}:", lista_funcao)
+                        if sel_funcao:
+                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_funcao].isin(sel_funcao)]
+                            
+                    if col_org:
+                        lista_org = df_notion[col_org].dropna().unique().tolist()
+                        sel_org = c3.multiselect(f"Filtrar por {col_org}:", lista_org)
+                        if sel_org:
+                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_org].isin(sel_org)]
+                            
+                    if not any([col_atuacao, col_funcao, col_org]):
+                        st.info("💡 Dica: Para os filtros aparecerem, certifique-se de que as colunas na sua tabela do Notion se chamem 'Atuação', 'Função' ou 'Organização'.")
+
+                st.write("---")
+                # Mostra a tabela já com os filtros aplicados
+                st.dataframe(df_filtrado_notion, use_container_width=True)
+                
             else:
                 st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
 
