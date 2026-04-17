@@ -416,6 +416,29 @@ else:
             if not df_notion.empty:
                 st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
                 
+                # ==========================================
+                # 🛠️ AJUSTE DA ORDEM DAS COLUNAS
+                # ==========================================
+                # Substitua os nomes abaixo pelos nomes EXATOS das suas colunas no Notion
+                ordem_ideal = [
+                    "Nome da Coluna 1", 
+                    "Atuação", 
+                    "Função", 
+                    "Organização", 
+                    "Status"
+                ] 
+                
+                # Garante que só vai ordenar as colunas que realmente existem no seu Notion
+                colunas_existentes = [col for col in ordem_ideal if col in df_notion.columns]
+                # Pega as outras colunas que você esqueceu de listar e joga pro final (para não perder nenhum dado)
+                colunas_extras = [col for col in df_notion.columns if col not in colunas_existentes]
+                
+                # Aplica a nova ordem "forçada" na tabela
+                df_notion = df_notion[colunas_existentes + colunas_extras]
+                # ==========================================
+
+                # --- GAVETA DE FILTROS INTELIGENTES ---
+                
                 # --- GAVETA DE FILTROS INTELIGENTES ---
                 with st.expander("🔍 FILTROS AVANÇADOS", expanded=True):
                     # O código procura colunas que contenham essas palavras-chave
