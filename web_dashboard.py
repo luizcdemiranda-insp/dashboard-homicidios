@@ -10,9 +10,7 @@ from email.mime.multipart import MIMEMultipart
 import requests
 import folium
 from streamlit_folium import st_folium
-from geopy.geocoders import Nominatim
 from folium.plugins import Draw
-import time
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -174,72 +172,67 @@ def carregar_dados_notion():
         return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOLOCALIZADOR E MAPA
+# 2.6 GEOPROCESSAMENTO E MAPA (NOVO MÉTODO)
 # =====================================================================
-geolocator = Nominatim(user_agent="monitor_homicidios_app")
-
-@st.cache_data
-def geocodificar_endereco(endereco):
-    try:
-        location = geolocator.geocode(endereco)
-        if location:
-            return location.latitude, location.longitude
-        return None, None
-    except:
-        return None, None
-
 def pagina_mapa():
-    st.header("📍 GEOPROCESSAMENTO E ANÁLISE TERRITORIAL")
+    st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
     
-    df = carregar_dados() 
+    df = carregar_dados()
     
-    with st.expander("🌐 Processar Pontos da Planilha", expanded=False):
-        st.write("Convertendo endereços em marcadores...")
-        pontos_mapeados = []
+    # Busca colunas que contêm a palavra "LAT" e "LON" (independente do nome exato)
+    col_lat = next((c for c in df.columns if "LAT" in c), None)
+    col_lon = next((c for c in df.columns if "LON" in c), None)
+
+    if col_lat and col_lon:
+        # Pega a coluna, transforma em string para trocar vírgula por ponto (Padrão BR -> US)
+        # E converte para número. O que der erro vira NaN.
+        df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
+        df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
         
-        for index, row in df.head(10).iterrows():
-            endereco_completo = f"{row.get('LOGRADOURO', '')}, {row.get('BAIRRO', '')}, {row.get('MUNICÍPIO', '')}, RJ, Brasil"
-            lat, lon = geocodificar_endereco(endereco_completo)
-            if lat:
-                pontos_mapeados.append({
-                    "lat": lat, 
-                    "lon": lon, 
-                    "info": f"<b>Local:</b> {row.get('LOGRADOURO', '')}<br><b>Bairro:</b> {row.get('BAIRRO', '')}"
-                })
-            time.sleep(1)
+        # Cria uma cópia tática do df só para o mapa e joga as coordenadas limpas de volta
+        df_mapa = df.copy()
+        df_mapa[col_lat] = df_lat_limpa
+        df_mapa[col_lon] = df_lon_limpa
+        
+        # Remove as linhas vazias (que deram erro no Sheets) apenas dessas colunas
+        df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
+        
+        st.success(f"✅ {len(df_mapa)} pontos localizados via coordenadas da planilha.")
 
-    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
+        m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
 
-    folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
-    folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri',
-        name='Vista de Satélite (High Res)'
-    ).add_to(m)
-
-    Draw(
-        export=False,
-        position='topleft',
-        draw_options={
-            'polyline': True,
-            'rectangle': True,
-            'polygon': True,
-            'circle': False,
-            'marker': True,
-            'circlemarker': False
-        }
-    ).add_to(m)
-
-    for p in pontos_mapeados:
-        folium.Marker(
-            [p['lat'], p['lon']], 
-            popup=folium.Popup(p['info'], max_width=300), 
-            icon=folium.Icon(color='red', icon='info-sign')
+        folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
+        folium.TileLayer(
+            tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}',
+            attr='Google',
+            name='Satélite com Ruas (Google Hybrid)'
         ).add_to(m)
 
-    folium.LayerControl().add_to(m)
+        Draw(
+            export=False,
+            position='topleft',
+            draw_options={
+                'polyline': True, 'rectangle': True, 'polygon': True,
+                'circle': False, 'marker': True, 'circlemarker': False
+            }
+        ).add_to(m)
 
-    st_folium(m, width=1200, height=600, returned_objects=[])
+        for index, row in df_mapa.iterrows():
+            popup_texto = f"<b>Data:</b> {row.get('DATA', 'S/D')}<br><b>Local:</b> {row.get('LOGRADOURO', 'S/D')}"
+            folium.CircleMarker(
+                location=[row[col_lat], row[col_lon]],
+                radius=6,
+                popup=folium.Popup(popup_texto, max_width=300),
+                color='#8B0000',
+                fill=True,
+                fill_color='#FF0000',
+                fill_opacity=0.6
+            ).add_to(m)
+
+        folium.LayerControl().add_to(m)
+        st_folium(m, width=1200, height=600, returned_objects=[])
+    else:
+        st.error("⚠️ Colunas de Latitude/Longitude não encontradas na planilha.")
 
 # =====================================================================
 # 3. INTERFACE DE ACESSO
@@ -359,7 +352,11 @@ def gerar_dashboard(df_filtrado):
         st.markdown("### 📅 POR DIA DA SEMANA")
         if COL_DIA:
             tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
-            tabela_dia = tabela_dia[~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)]
+            
+            # Limpeza do gráfico dividida para evitar erro de sintaxe
+            filtro = ~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)
+            tabela_dia = tabela_dia[filtro]
+            
             if not tabela_dia.empty:
                 grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350)
                 st.altair_chart(grafico_dia, use_container_width=True)
@@ -405,209 +402,4 @@ def gerar_dashboard(df_filtrado):
         with card1:
             st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_investiga}</h2></div>', unsafe_allow_html=True)
         with card2:
-            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_trafico}</h2></div>', unsafe_allow_html=True)
-        with card3:
-            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_milicia}</h2></div>', unsafe_allow_html=True)
-        with card4:
-            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
-
-# =====================================================================
-# 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
-# =====================================================================
-if not st.session_state.logado:
-    tela_acesso()
-else:
-    st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
-    
-    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
-    if st.session_state.user_nivel == "Master":
-        lista_menu.append("⚙️ CONFIGURAÇÕES")
-        
-    menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
-
-    # --- LÓGICA DE SUBMENU PARA ORCRIM ---
-    sub_menu_orcrim = None
-    if menu == "2. ORCRIM":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("📂 **SELECIONE A ÁREA:**")
-        sub_menu_orcrim = st.sidebar.radio("", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"], label_visibility="collapsed")
-
-    if st.sidebar.button("Sair"):
-        st.session_state.logado = False
-        st.rerun()
-
-# ==========================================================
-# ---> CABEÇALHO OFICIAL (COM LOGOS) <---
-# ==========================================================
-    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-    with col_esq:
-        try: st.image("logo1.png", width=150)
-        except: st.write("")
-    with col_meio:
-        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    with col_dir:
-        try: st.image("logo2.png", width=150)
-        except: st.write("")
-    st.write("---")
-# ==========================================================
-    
-    df = carregar_dados()
-
-    if menu == "1. VISÃO GERAL":
-        st.header("📊 VISÃO GERAL")
-        
-        df['ANO'] = df['ANO'].astype(int).astype(str)
-        anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        
-        st.subheader("FILTROS DE ANÁLISE")
-        modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
-
-        anos_selecionados = []
-        
-        if modo_analise == "ANÁLISE INDIVIDUAL":
-            col_drop, _ = st.columns([2, 8]) 
-            ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind_vg")
-            anos_selecionados = [ano_escolhido]
-            
-        else:
-            st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
-            
-            def selecionar_todos_vg():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
-            def limpar_selecao_vg():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
-
-            for ano in anos_disp:
-                if f"chk_vg_{ano}" not in st.session_state:
-                    st.session_state[f"chk_vg_{ano}"] = True
-
-            b1, b2, _ = st.columns([2, 2, 6])
-            b1.button("✓ Todos os anos", on_click=selecionar_todos_vg, key="btn_all_vg")
-            b2.button("✗ Limpar seleção", on_click=limpar_selecao_vg, key="btn_clear_vg")
-            
-            colunas_anos = st.columns(min(len(anos_disp), 8) or 1, gap="small")
-            for i, ano in enumerate(anos_disp):
-                colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_vg_{ano}")
-            
-            anos_selecionados = [ano for ano in anos_disp if st.session_state.get(f"chk_vg_{ano}", False)]
-
-        if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
-            st.write("---")
-            if df_filtrado.empty:
-                st.warning("Nenhuma ocorrência encontrada para os anos selecionados.")
-            else:
-                gerar_dashboard(df_filtrado)
-        else:
-            st.warning("⚠️ Selecione pelo menos um ano para visualizar os dados.")
-
-    elif menu == "2. ORCRIM":
-        if sub_menu_orcrim == "ÁREA 1":
-            st.header("📓 ÁREA 1")
-            st.write("Dados extraídos em tempo real da Central de Inteligência.")
-            
-            with st.spinner("Sincronizando com o Notion..."):
-                df_notion = carregar_dados_notion()
-                
-            if not df_notion.empty:
-                st.success(f"✅ Conexão estabelecida! {len(df_notion)} registros encontrados.")
-                
-                # ==========================================
-                # 🛠️ AJUSTE DA ORDEM DAS COLUNAS
-                # ==========================================
-                ordem_ideal = [ 
-                    "Nome",
-                    "Vulgo",
-                    "RG",
-                    "Foto",
-                    "Atuação",
-                    "Organização",
-                    "Função",
-                    "Situação",
-                    "Rede social",
-                    "Informe"
-                ] 
-                
-                colunas_existentes = [col for col in ordem_ideal if col in df_notion.columns]
-                colunas_extras = [col for col in df_notion.columns if col not in colunas_existentes]
-                
-                df_notion = df_notion[colunas_existentes + colunas_extras]
-                # ==========================================
-
-                # --- GAVETA DE FILTROS INTELIGENTES ---
-                with st.expander("🔍 FILTROS AVANÇADOS", expanded=True):
-                    col_atuacao = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
-                    col_funcao = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
-                    col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORGANIZACAO" in c.upper() or "ORCRIM" in c.upper()), None)
-                    
-                    df_filtrado_notion = df_notion.copy()
-                    
-                    c1, c2, c3 = st.columns(3)
-                    
-                    if col_atuacao:
-                        lista_atuacao = df_notion[col_atuacao].dropna().unique().tolist()
-                        sel_atuacao = c1.multiselect(f"Filtrar por {col_atuacao}:", lista_atuacao)
-                        if sel_atuacao:
-                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_atuacao].isin(sel_atuacao)]
-                            
-                    if col_funcao:
-                        lista_funcao = df_notion[col_funcao].dropna().unique().tolist()
-                        sel_funcao = c2.multiselect(f"Filtrar por {col_funcao}:", lista_funcao)
-                        if sel_funcao:
-                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_funcao].isin(sel_funcao)]
-                            
-                    if col_org:
-                        lista_org = df_notion[col_org].dropna().unique().tolist()
-                        sel_org = c3.multiselect(f"Filtrar por {col_org}:", lista_org)
-                        if sel_org:
-                            df_filtrado_notion = df_filtrado_notion[df_filtrado_notion[col_org].isin(sel_org)]
-                            
-                    if not any([col_atuacao, col_funcao, col_org]):
-                        st.info("💡 Dica: Para os filtros aparecerem, certifique-se de que as colunas na sua tabela do Notion se chamem 'Atuação', 'Função' ou 'Organização'.")
-
-                st.write("---")
-                
-                # ==========================================
-                # 🖼️ MOTOR DE RENDERIZAÇÃO DE IMAGENS E LINKS
-                # ==========================================
-                config_colunas = {}
-                for col in df_filtrado_notion.columns:
-                    if "FOTO" in col.upper() or "IMAGEM" in col.upper():
-                        config_colunas[col] = st.column_config.ImageColumn(col, width="small") 
-                    elif df_filtrado_notion[col].astype(str).str.startswith("http").any():
-                        config_colunas[col] = st.column_config.LinkColumn(col, display_text="🔗 Acessar")
-
-                st.dataframe(df_filtrado_notion, column_config=config_colunas, use_container_width=True)
-                
-            else:
-                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
-
-        elif sub_menu_orcrim in ["ÁREA 2", "ÁREA 3", "ÁREA 4"]:
-            st.header(f"🗺️ {sub_menu_orcrim}")
-            st.info(f"O painel analítico da {sub_menu_orcrim} está em fase de estruturação de dados.")
-            st.write("Aguardando integração das tabelas correspondentes.")
-            
-    elif menu == "3. MAPA":
-        pagina_mapa()
-
-    elif menu == "4. MODO ANALÍTICO":
-        st.header("📑 MODO ANALÍTICO")
-        st.dataframe(df)
-
-    elif menu == "5. ASSISTENTE IA":
-        st.header("🤖 Analista Criminal Virtual")
-        api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
-        if api_key:
-            try:
-                genai.configure(api_key=api_key)
-                st.success("Sistemas de IA prontos. Insira a lógica do chat aqui.")
-            except:
-                st.error("Erro na chave de API.")
-
-    elif menu == "⚙️ CONFIGURAÇÕES":
-        st.header("⚙️ Painel do Administrador")
-        try:
-            df_u = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS")
-            st.dataframe(df_u)
-        except Exception as e:
-            st.error(f"Erro ao carregar usuários: {e}")
+            st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4><h2 style="margin: 1
