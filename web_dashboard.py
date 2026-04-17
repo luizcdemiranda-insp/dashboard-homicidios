@@ -436,12 +436,18 @@ else:
                 # ==========================================
                 # 🛠️ AJUSTE DA ORDEM DAS COLUNAS
                 # ==========================================
-                ordem_ideal = [
-                    "Nome da Coluna 1", 
-                    "Atuação", 
-                    "Função", 
-                    "Organização", 
-                    "Status"
+                ordem_ideal = [ 
+                    "Nome",
+                    "Vulgo",
+                    "RG",
+                    "Foto",
+                    "Comunidades",
+                    "Atuação",
+                    "Organização",
+                    "Função",
+                    "Situação",
+                    "Rede social",
+                    "Informe"
                 ] 
                 
                 colunas_existentes = [col for col in ordem_ideal if col in df_notion.columns]
