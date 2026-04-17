@@ -245,5 +245,15 @@ def gerar_dashboard(df_filtrado):
     with col1:
         st.markdown("### 📅 POR DIA DA SEMANA")
         if COL_DIA:
+            # 1. Agrupa os dados
             tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
-            tabela_dia = tabela_dia[~
+            
+            # 2. Cria o filtro em uma linha separada (à prova de quebra de texto)
+            filtro_limpeza = ~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)
+            
+            # 3. Aplica o filtro
+            tabela_dia = tabela_dia[filtro_limpeza]
+            
+            if not tabela_dia.empty:
+                grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350)
+                st.altair_chart(grafico_dia, use_container_width=True)
