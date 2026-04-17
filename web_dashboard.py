@@ -421,11 +421,17 @@ else:
                 # ==========================================
                 # Substitua os nomes abaixo pelos nomes EXATOS das suas colunas no Notion
                 ordem_ideal = [
-                    "Nome da Coluna 1", 
-                    "Atuação", 
-                    "Função", 
-                    "Organização", 
-                    "Status"
+                    "Nome", 
+                    "Vulgo", 
+                    "RG", 
+                    "Foto", 
+                    "Comunidade",
+                    "Atuação",
+                    "Organização",
+                    "Função",
+                    "Situação",
+                    "Rede Social",
+                    "Informe"
                 ] 
                 
                 # Garante que só vai ordenar as colunas que realmente existem no seu Notion
