@@ -436,43 +436,28 @@ else:
                 # ==========================================
                 # 🛠️ AJUSTE DA ORDEM DAS COLUNAS
                 # ==========================================
-                # Substitua os nomes abaixo pelos nomes EXATOS das suas colunas no Notion
                 ordem_ideal = [
-                    "Nome", 
-                    "Vulgo", 
-                    "RG", 
-                    "Foto", 
-                    "Comunidade",
-                    "Atuação",
-                    "Organização",
-                    "Função",
-                    "Situação",
-                    "Rede Social",
-                    "Informe"
+                    "Nome da Coluna 1", 
+                    "Atuação", 
+                    "Função", 
+                    "Organização", 
+                    "Status"
                 ] 
                 
-                # Garante que só vai ordenar as colunas que realmente existem no seu Notion
                 colunas_existentes = [col for col in ordem_ideal if col in df_notion.columns]
-                # Pega as outras colunas que você esqueceu de listar e joga pro final (para não perder nenhum dado)
                 colunas_extras = [col for col in df_notion.columns if col not in colunas_existentes]
                 
-                # Aplica a nova ordem "forçada" na tabela
                 df_notion = df_notion[colunas_existentes + colunas_extras]
                 # ==========================================
 
                 # --- GAVETA DE FILTROS INTELIGENTES ---
-                
-                # --- GAVETA DE FILTROS INTELIGENTES ---
                 with st.expander("🔍 FILTROS AVANÇADOS", expanded=True):
-                    # O código procura colunas que contenham essas palavras-chave
                     col_atuacao = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
                     col_funcao = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
                     col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORGANIZACAO" in c.upper() or "ORCRIM" in c.upper()), None)
                     
-                    # Cria uma cópia para receber os filtros sem alterar o original
                     df_filtrado_notion = df_notion.copy()
                     
-                    # Cria 3 colunas para colocar as caixas de seleção lado a lado
                     c1, c2, c3 = st.columns(3)
                     
                     if col_atuacao:
@@ -503,18 +488,12 @@ else:
                 # ==========================================
                 config_colunas = {}
                 for col in df_filtrado_notion.columns:
-                    # Se o nome da coluna tiver "FOTO" ou "IMAGEM", o Streamlit desenha a foto
                     if "FOTO" in col.upper() or "IMAGEM" in col.upper():
                         config_colunas[col] = st.column_config.ImageColumn(col, width="large")
-                    # Se for outro tipo de link (como um PDF), vira um botão clicável
                     elif df_filtrado_notion[col].astype(str).str.startswith("http").any():
                         config_colunas[col] = st.column_config.LinkColumn(col, display_text="🔗 Acessar")
 
-                # Mostra a tabela aplicando a transformação das fotos
                 st.dataframe(df_filtrado_notion, column_config=config_colunas, use_container_width=True)
-                
-            else:
-                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
                 
             else:
                 st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
