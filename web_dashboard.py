@@ -12,7 +12,6 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
 import re
-import streamlit.components.v1 as components
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -374,7 +373,7 @@ else:
             if not df_notion.empty:
                 st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
                 
-                # --- BUSCADOR CENTRAL (Ajustado e menor) ---
+                # --- BUSCADOR CENTRAL ---
                 st.markdown("### 🎯 Busca Integrada de Alvos")
                 if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
                 def limpar_alvo(): st.session_state.alvo_busca = ""
@@ -431,7 +430,6 @@ else:
 
                             mermaid_code = "graph TD;\n"
                             
-                            # Hierarquia Tática Top-Down
                             hierarquia = [("DONO", "Dono"), ("FRENTE", "Frente"), ("2º", "2º em Comando"), ("GERENTE", "Gerente"), ("LÍDER", "Liderança"), ("LIDER", "Liderança")]
                             def get_nivel(funcao):
                                 f_up = str(funcao).upper()
@@ -440,11 +438,17 @@ else:
                                 return 99, "Demais Integrantes / Funções"
 
                             orgs = df_area["Organização"].dropna().unique()
+                            linhas_desenhadas = set()
+                            
                             for org in orgs:
                                 org_cl = clean_text(org)
                                 if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
+                                
                                 id_org = safe_id(org_cl)
-                                mermaid_code += f'  {id_org}["🏢 {org_cl}"]:::orgClass;\n'
+                                if id_org not in linhas_desenhadas:
+                                    mermaid_code += f'  {id_org}["🏢 {org_cl}"];\n'
+                                    mermaid_code += f'  style {id_org} fill:#1E2130,stroke:#ff4b4b,stroke-width:2px,color:#fff;\n'
+                                    linhas_desenhadas.add(id_org)
 
                                 df_org = df_area[df_area["Organização"] == org]
                                 ranks = {}
@@ -460,33 +464,28 @@ else:
                                 for rank_idx in sorted(ranks.keys()):
                                     nome_nivel = ranks[rank_idx]["nome_nivel"]
                                     id_nivel = safe_id(org_cl + nome_nivel)
-                                    mermaid_code += f'  {id_nivel}["⚙️ {nome_nivel}"]:::funcClass;\n'
-                                    mermaid_code += f'  {prev_id} --> {id_nivel};\n'
+                                    
+                                    if id_nivel not in linhas_desenhadas:
+                                        mermaid_code += f'  {id_nivel}["⚙️ {nome_nivel}"];\n'
+                                        mermaid_code += f'  style {id_nivel} fill:#2d3446,stroke:#F1C40F,stroke-width:1px,color:#fff;\n'
+                                        mermaid_code += f'  {prev_id} --> {id_nivel};\n'
+                                        linhas_desenhadas.add(id_nivel)
                                     
                                     for p_nome, p_func in ranks[rank_idx]["pessoas"]:
                                         id_pessoa = safe_id(org_cl + p_nome + p_func)
-                                        if p_nome == clean_text(alvo_selecionado):
-                                            mermaid_code += f'  {id_pessoa}["🎯 {p_nome} ({p_func})"]:::alvoClass;\n'
-                                        else:
-                                            mermaid_code += f'  {id_pessoa}["👤 {p_nome} ({p_func})"]:::pessoaClass;\n'
-                                        mermaid_code += f'  {id_nivel} --> {id_pessoa};\n'
+                                        if id_pessoa not in linhas_desenhadas:
+                                            if p_nome == clean_text(alvo_selecionado):
+                                                mermaid_code += f'  {id_pessoa}["🎯 {p_nome} ({p_func})"];\n'
+                                                mermaid_code += f'  style {id_pessoa} fill:#E74C3C,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold;\n'
+                                            else:
+                                                mermaid_code += f'  {id_pessoa}["👤 {p_nome} ({p_func})"];\n'
+                                                mermaid_code += f'  style {id_pessoa} fill:#4a4f63,stroke:#333,stroke-width:1px,color:#fff;\n'
+                                            mermaid_code += f'  {id_nivel} --> {id_pessoa};\n'
+                                            linhas_desenhadas.add(id_pessoa)
                                     prev_id = id_nivel
 
-                            mermaid_code += "\n  classDef orgClass fill:#1E2130,stroke:#ff4b4b,stroke-width:2px,color:#fff;\n"
-                            mermaid_code += "  classDef funcClass fill:#2d3446,stroke:#F1C40F,stroke-width:1px,color:#fff;\n"
-                            mermaid_code += "  classDef pessoaClass fill:#4a4f63,stroke:#333,stroke-width:1px,color:#fff;\n"
-                            mermaid_code += "  classDef alvoClass fill:#E74C3C,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold;\n"
-
-                            # Servidor HTML Blindado para Renderização do Organograma
-                            html_code = f"""
-                            <!DOCTYPE html><html><head><script type="module">
-                                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-                                mermaid.initialize({{ startOnLoad: true, theme: 'dark' }});
-                            </script></head><body style="background-color: #0E1117; color: white;">
-                                <pre class="mermaid" style="text-align: center;">\n{mermaid_code}\n</pre>
-                            </body></html>
-                            """
-                            components.html(html_code, height=750, scrolling=True)
+                            # Renderizador Nativo Blindado
+                            st.markdown(f"```mermaid\n{mermaid_code}\n```")
                         else:
                             st.warning("O alvo não possui um território (Atuação) cadastrado para mapeamento.")
                     else:
