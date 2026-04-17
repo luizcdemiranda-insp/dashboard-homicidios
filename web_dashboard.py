@@ -8,6 +8,8 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
+import folium
+from streamlit_folium import st_folium
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -357,6 +359,44 @@ def gerar_dashboard(df_filtrado):
         with card4:
             st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
 
+def pagina_mapa():
+    st.header("📍 GEOPROCESSAMENTO: MAPA CRIMINAL")
+    st.write("Visualização de áreas demarcadas e pontos de interesse.")
+
+    # 1. Configuração Inicial do Mapa (Centro no RJ como exemplo)
+    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=12, tiles="cartodbpositron")
+
+    # 2. EXEMPLO DE CAMADA (Layer/Polígono): Área de Influência
+    # Aqui você poderia puxar coordenadas de uma tabela
+    area_conflito = [
+        [-22.92, -43.20], [-22.94, -43.20], 
+        [-22.94, -43.22], [-22.92, -43.22]
+    ]
+    folium.Polygon(
+        locations=area_conflito,
+        color="red",
+        fill=True,
+        fill_color="red",
+        fill_opacity=0.3,
+        popup="ÁREA DE RISCO 01"
+    ).add_to(m)
+
+    # 3. EXEMPLO DE PONTOS (Markers): Ocorrências
+    pontos_teste = [
+        {"loc": [-22.915, -43.180], "pop": "Ocorrência A"},
+        {"loc": [-22.930, -43.190], "pop": "Ocorrência B"}
+    ]
+
+    for p in pontos_teste:
+        folium.Marker(
+            location=p["loc"],
+            popup=p["pop"],
+            icon=folium.Icon(color="darkred", icon="info-sign")
+        ).add_to(m)
+
+    # Renderiza o mapa no Streamlit
+    st_folium(m, width=1200, height=600)
+    
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
 # =====================================================================
@@ -365,7 +405,7 @@ if not st.session_state.logado:
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
     
-    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MODO ANALÍTICO", "4. ASSISTENTE IA"]
+    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
     if st.session_state.user_nivel == "Master":
         lista_menu.append("⚙️ CONFIGURAÇÕES")
         
@@ -533,12 +573,15 @@ else:
             st.header(f"🗺️ {sub_menu_orcrim}")
             st.info(f"O painel analítico da {sub_menu_orcrim} está em fase de estruturação de dados.")
             st.write("Aguardando integração das tabelas correspondentes.")
-
-    elif menu == "3. MODO ANALÍTICO":
+            
+    elif menu == "3. MAPA":
+    pagina_mapa()
+    
+    elif menu == "4. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
         st.dataframe(df)
 
-    elif menu == "4. ASSISTENTE IA":
+    elif menu == "5. ASSISTENTE IA":
         st.header("🤖 Analista Criminal Virtual")
         api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
         if api_key:
