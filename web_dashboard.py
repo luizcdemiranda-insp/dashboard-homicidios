@@ -519,7 +519,8 @@ else:
                 config_colunas = {}
                 for col in df_filtrado_notion.columns:
                     if "FOTO" in col.upper() or "IMAGEM" in col.upper():
-                        config_colunas[col] = st.column_config.ImageColumn(col, width="large")
+                        # ALTERE ESTA LINHA ABAIXO:
+                        config_colunas[col] = st.column_config.ImageColumn(col, width="small") 
                     elif df_filtrado_notion[col].astype(str).str.startswith("http").any():
                         config_colunas[col] = st.column_config.LinkColumn(col, display_text="🔗 Acessar")
 
