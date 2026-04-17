@@ -41,14 +41,6 @@ st.markdown("""
     section[data-testid="stSidebar"] div[role="radiogroup"] > label {
         justify-content: flex-start; padding-left: 20px;
     }
-    div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
-        display: flex; flex-direction: row; flex-wrap: wrap; gap: 15px; width: 100%;
-    }
-    @media (max-width: 768px) {
-        div[data-testid="stMainBlockContainer"] div[role="radiogroup"] { flex-direction: column; gap: 5px; }
-        h1 { font-size: 38px !important; }
-        h2 { font-size: 42px !important; }
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -62,7 +54,7 @@ if "user_nome" not in st.session_state: st.session_state.user_nome = None
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # =====================================================================
-# 2. CARGA DE DADOS
+# 2. CARGA DE DADOS (CRIMES E NOTION)
 # =====================================================================
 @st.cache_data
 def carregar_dados():
@@ -197,13 +189,11 @@ def tela_acesso():
                         email_senha = st.secrets["email"]["senha"]
                         email_destino = "luizcdemiranda.insp@gmail.com"
 
-                        corpo = f"""
-                        NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
+                        corpo = f"""NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
                         Nome: {n_cad}
                         Matrícula: {m_cad}
                         Senha Escolhida: {s_cad}
-                        Hash SHA256: {senha_hash}
-                        """
+                        Hash SHA256: {senha_hash}"""
 
                         msg = MIMEMultipart()
                         msg['From'] = email_remetente
@@ -223,37 +213,25 @@ def tela_acesso():
                     st.warning("Preencha todos os campos.")
 
 # =====================================================================
-# 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
+# 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD E RENDERIZADORES
 # =====================================================================
+def render_kpi(titulo, valor, cor):
+    html = f"""
+    <div style="background-color: #1E2130; padding: 25px; border-radius: 12px; border-top: 5px solid {cor}; text-align: center;">
+        <h3 style="color: #b0b4c4; font-size: 16px;">{titulo}</h3>
+        <h1 style="color: white; font-size: 48px;">{valor}</h1>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_card(titulo, valor, cor):
+    html = f"""
+    <div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid {cor}; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;">
+        <h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">{titulo}</h4>
+        <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{valor}</h2>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
 def gerar_dashboard(df_filtrado):
-    COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
-    COL_CIRCUNSCRICAO = next((c for c in df_filtrado.columns if "CIRCUNSCRI" in str(c)), None)
-    COL_VITIMAS = next((c for c in df_filtrado.columns if "VÍTIMAS" in str(c) or "VITIMAS" in str(c)), None)
-
-    total_procedimentos = len(df_filtrado)
-    if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
-        total_vitimas = pd.to_numeric(df_filtrado[COL_VITIMAS].astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
-    else: total_vitimas = 0
-
-    c1, c2 = st.columns(2)
-    with c1: st.markdown(f'<div style="background-color: #1E2130; padding: 25px; border-radius: 12px; border-top: 5px solid #ff4b4b; text-align: center;"><h3 style="color: #b0b4c4; font-size: 16px;">📊 TOTAL PROCEDIMENTOS</h3><h1 style="color: white; font-size: 48px;">{total_procedimentos:,}</h1></div>'.replace(',', '.'), unsafe_allow_html=True)
-    with c2: st.markdown(f'<div style="background-color: #1E2130; padding: 25px; border-radius: 12px; border-top: 5px solid #F1C40F; text-align: center;"><h3 style="color: #b0b4c4; font-size: 16px;">👤 TOTAL VÍTIMAS</h3><h1 style="color: white; font-size: 48px;">{int(total_vitimas):,}</h1></div>'.replace(',', '.'), unsafe_allow_html=True)
-
-    st.write("<br>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 📅 POR DIA DA SEMANA")
-        if COL_DIA:
-            # 1. Agrupa os dados
-            tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
-            
-            # 2. Cria o filtro em uma linha separada (à prova de quebra de texto)
-            filtro_limpeza = ~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)
-            
-            # 3. Aplica o filtro
-            tabela_dia = tabela_dia[filtro_limpeza]
-            
-            if not tabela_dia.empty:
-                grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350)
-                st.altair_chart(grafico_dia, use_container_width=True)
+    COL_DIA = next((
