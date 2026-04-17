@@ -575,7 +575,86 @@ else:
             st.write("Aguardando integração das tabelas correspondentes.")
             
     elif menu == "3. MAPA":
-        pagina_mapa()
+        from geopy.geocoders import Nominatim
+from folium.plugins import Draw
+import time
+
+# Criar um geocodificador (Serviço gratuito Nominatim)
+geolocator = Nominatim(user_agent="monitor_homicidios_app")
+
+@st.cache_data
+def geocodificar_endereco(endereco):
+    try:
+        location = geolocator.geocode(endereco)
+        if location:
+            return location.latitude, location.longitude
+        return None, None
+    except:
+        return None, None
+
+def pagina_mapa():
+    st.header("📍 GEOPROCESSAMENTO E ANÁLISE TERRITORIAL")
+    
+    # --- CARGA E GEOCODIFICAÇÃO ---
+    df = carregar_dados() 
+    
+    with st.expander("🌐 Processar Pontos da Planilha", expanded=False):
+        st.write("Convertendo endereços em marcadores...")
+        pontos_mapeados = []
+        
+        # Teste com as 10 primeiras linhas para garantir performance
+        for index, row in df.head(10).iterrows():
+            # Monta o endereço concatenando as colunas do seu Sheets
+            endereco_completo = f"{row['LOGRADOURO']}, {row['BAIRRO']}, {row['MUNICÍPIO']}, RJ, Brasil"
+            lat, lon = geocodificar_endereco(endereco_completo)
+            if lat:
+                pontos_mapeados.append({
+                    "lat": lat, 
+                    "lon": lon, 
+                    "info": f"<b>Local:</b> {row['LOGRADOURO']}<br><b>Bairro:</b> {row['BAIRRO']}"
+                })
+            time.sleep(1) # Respeita o limite de 1 segundo por requisição do Nominatim
+
+    # --- CONFIGURAÇÃO DO MAPA ---
+    # Centralizado no Rio de Janeiro
+    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
+
+    # 1. Camadas de Fundo (Escolha entre Ruas ou Satélite)
+    folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri',
+        name='Vista de Satélite (High Res)'
+    ).add_to(m)
+
+    # 2. Ferramenta de Desenho (Apenas Visual/Rascunho)
+    # Permite desenhar polígonos, retângulos e marcadores na hora
+    Draw(
+        export=False, # Desativado para não gerar arquivos extras
+        position='topleft',
+        draw_options={
+            'polyline': True,
+            'rectangle': True,
+            'polygon': True,
+            'circle': False,
+            'marker': True,
+            'circlemarker': False
+        }
+    ).add_to(m)
+
+    # 3. Plotagem dos Pontos Geocodificados
+    for p in pontos_mapeados:
+        folium.Marker(
+            [p['lat'], p['lon']], 
+            popup=folium.Popup(p['info'], max_width=300), 
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(m)
+
+    # 4. Controle de Camadas (Habilita o seletor no canto superior direito)
+    folium.LayerControl().add_to(m)
+
+    # Renderiza o mapa de forma estática (sem capturar retorno de desenhos)
+    st_folium(m, width=1200, height=600, returned_objects=[])
     
     elif menu == "4. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
