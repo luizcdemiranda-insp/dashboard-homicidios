@@ -52,6 +52,7 @@ st.markdown("""
 def gerar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
+# Inicialização de Segurança da Sessão
 if "logado" not in st.session_state: st.session_state.logado = False
 if "user_nivel" not in st.session_state: st.session_state.user_nivel = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = None
@@ -83,7 +84,7 @@ def render_card(titulo, valor, cor):
 # =====================================================================
 @st.cache_data
 def carregar_dados():
-    url = f"[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/){ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
+    url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
     df = pd.read_csv(url)
     df.columns = [str(col).strip().upper() for col in df.columns]
     if 'ANO' not in df.columns and 'DATA' in df.columns:
@@ -95,7 +96,7 @@ def carregar_dados_notion():
     try:
         token = st.secrets["notion"]["token"]
         database_id = st.secrets["notion"]["database_id"]
-        url = f"[https://api.notion.com/v1/databases/](https://api.notion.com/v1/databases/){database_id}/query"
+        url = f"https://api.notion.com/v1/databases/{database_id}/query"
         headers = {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28", "Content-Type": "application/json"}
         response = requests.post(url, headers=headers)
         if response.status_code != 200: return pd.DataFrame()
@@ -165,7 +166,7 @@ def pagina_mapa():
 
         m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
         folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
-        folium.TileLayer(tiles='[http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x=](http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x=){x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
+        folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
         Draw(export=False, position='topleft').add_to(m)
 
         col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
@@ -176,4 +177,72 @@ def pagina_mapa():
 
         mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
         for _, row in df_mapa.iterrows():
-            html_popup
+            html_popup = f"""<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"""
+            folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
+        folium.LayerControl().add_to(m)
+        st_folium(m, width=1200, height=600, returned_objects=[])
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+
+# =====================================================================
+# 3. INTERFACE DE ACESSO
+# =====================================================================
+def tela_acesso():
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ ACESSO AO SISTEMA</h1>", unsafe_allow_html=True)
+        aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Solicitar Cadastro"])
+        
+        with aba_login:
+            mat_login = st.text_input("Matrícula", key="login_mat_input")
+            senha_login = st.text_input("Senha", type="password", key="login_pass_input")
+            if st.button("Acessar Painel"):
+                try:
+                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
+                    df_users = pd.read_csv(url_users)
+                    df_users.columns = [str(col).strip().upper() for col in df_users.columns]
+                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
+                    senha_hash = gerar_hash(senha_login)
+                    user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
+                    if not user_match.empty:
+                        if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
+                            st.session_state.logado = True
+                            st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
+                            st.session_state.user_nome = user_match.iloc[0]['NOME']
+                            st.rerun()
+                        else: st.warning("Acesso Pendente.")
+                    else: st.error("Matrícula ou Senha incorretos.")
+                except: st.error("Erro na base de usuários.")
+
+        with aba_cadastro:
+            n_cad = st.text_input("Nome Completo", key="cad_nome_input")
+            m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
+            if st.button("Enviar Solicitação"):
+                if n_cad and m_cad and s_cad:
+                    try:
+                        senha_hash = gerar_hash(s_cad)
+                        email_remetente = st.secrets["email"]["remetente"]
+                        email_senha = st.secrets["email"]["senha"]
+                        email_destino = "luizcdemiranda.insp@gmail.com"
+                        corpo = f"NOVA SOLICITAÇÃO\nNome: {n_cad}\nMatrícula: {m_cad}\nHash SHA256: {senha_hash}"
+                        msg = MIMEMultipart()
+                        msg['From'] = email_remetente
+                        msg['To'] = email_destino
+                        msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
+                        msg.attach(MIMEText(corpo, 'plain'))
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login(email_remetente, email_senha)
+                        server.send_message(msg)
+                        server.quit()
+                        st.success("✅ Solicitação enviada!")
+                    except: st.error("Erro ao processar solicitação.")
+                else: st.warning("Preencha todos os campos.")
+
+# =====================================================================
+# 4. DASHBOARD 
+# =====================================================================
+def gerar_dashboard(df_filtrado):
+    COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
+    COL_CIRCUNSCRICAO = next((c for c in df_filtrado.columns if "CIRCUNSCRI" in str(c)), None)
+    COL_VITIMAS = next((c for c in df_filtrado.columns if "
