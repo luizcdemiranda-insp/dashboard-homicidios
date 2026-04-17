@@ -11,7 +11,6 @@ import requests
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
-import re
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -50,9 +49,6 @@ st.markdown("""
 
 def gerar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
-
-def limpar_id_mermaid(texto):
-    return re.sub(r'\W+', '', str(texto))
 
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -158,7 +154,7 @@ def carregar_dados_notion():
     except: return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOPROCESSAMENTO E MAPA 
+# 2.6 GEOPROCESSAMENTO E MAPA
 # =====================================================================
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
@@ -327,7 +323,7 @@ def gerar_dashboard(df_filtrado):
         with card4: render_card("TRÁFICO X MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA']), "#9B59B6")
 
 # =====================================================================
-# 5. LÓGICA DE NAVEGAÇÃO PRINCIPAL
+# 5. LÓGICA DE NAVEGAÇÃO PRINCIPAL E MÓDULOS DE ORCRIM
 # =====================================================================
 if not st.session_state.logado:
     tela_acesso()
@@ -406,9 +402,6 @@ else:
             if not df_notion.empty:
                 st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
                 
-                # ========================================================
-                # NOVO SISTEMA DE ABAS (DOSSIÊ / ORGANOGRAMA / TABELA)
-                # ========================================================
                 aba_dossie, aba_organograma, aba_tabela = st.tabs(["📇 DOSSIÊ TÁTICO", "🕸️ ORGANOGRAMA", "📋 TABELA DE DADOS"])
                 
                 with aba_dossie:
@@ -419,14 +412,11 @@ else:
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
                         st.write("---")
-                        
                         col_foto, col_info = st.columns([1, 2])
                         with col_foto:
                             foto_url = dados_alvo.get("Foto", "")
-                            if str(foto_url).startswith("http"):
-                                st.image(foto_url, use_container_width=True)
-                            else:
-                                st.info("👤 Foto não anexada no banco central.")
+                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
+                            else: st.info("👤 Foto não anexada no banco central.")
                                 
                         with col_info:
                             vulgo = dados_alvo.get("Vulgo", "N/I")
@@ -447,33 +437,54 @@ else:
                     st.markdown("### 🕸️ Estrutura Hierárquica (Teia de Vínculos)")
                     st.write("Organograma gerado automaticamente com base na Organização e Função de cada alvo cadastrado.")
                     
+                    # Funções Blindadas de Limpeza
+                    def safe_id(txt): 
+                        return "ID" + hashlib.md5(str(txt).encode('utf-8')).hexdigest()[:8]
+                    
+                    def clean_text(txt): 
+                        return str(txt).replace('"', '').replace('\n', ' ').replace('\r', '').strip()
+
                     mermaid_code = "graph TD;\n"
-                    linhas_adicionadas = set()
+                    linhas = set()
+                    nos_add = set()
                     
                     for _, row in df_notion.iterrows():
-                        org = str(row.get("Organização", "N/I")).strip()
-                        func = str(row.get("Função", "N/I")).strip()
-                        nome = str(row.get("Nome", "N/I")).strip()
+                        org = clean_text(row.get("Organização", "N/I"))
+                        func = clean_text(row.get("Função", "N/I"))
+                        nome = clean_text(row.get("Nome", "N/I"))
                         
-                        if org != "nan" and org != "N/I" and org != "":
-                            id_org = limpar_id_mermaid(org) + "_org"
-                            id_func = limpar_id_mermaid(func) + f"_{id_org}"
-                            id_nome = limpar_id_mermaid(nome) + f"_{id_func}"
+                        if org.upper() not in ["NAN", "N/I", "", "-"]:
+                            id_org = safe_id(org + "_org")
+                            id_func = safe_id(org + func + "_func")
                             
-                            # Conexão: Organização -> Função
-                            linha1 = f'  {id_org}["🏢 {org}"] --> {id_func}["⚙️ {func}"];\n'
-                            if linha1 not in linhas_adicionadas:
-                                mermaid_code += linha1
-                                linhas_adicionadas.add(linha1)
+                            # 1. Cria o Nó da Organização (Ex: TCP)
+                            if id_org not in nos_add:
+                                mermaid_code += f'  {id_org}["🏢 {org}"];\n'
+                                nos_add.add(id_org)
+                            
+                            # 2. Cria o Nó da Função (Ex: Frente) e Liga com a Org
+                            if func.upper() not in ["NAN", "N/I", "", "-"]:
+                                if id_func not in nos_add:
+                                    mermaid_code += f'  {id_func}["⚙️ {func}"];\n'
+                                    nos_add.add(id_func)
                                 
-                            # Conexão: Função -> Nome do Alvo
-                            if nome != "nan" and nome != "N/I" and nome != "":
-                                linha2 = f'  {id_func} --> {id_nome}["👤 {nome}"];\n'
-                                if linha2 not in linhas_adicionadas:
-                                    mermaid_code += linha2
-                                    linhas_adicionadas.add(linha2)
-                    
-                    # Renderiza o gráfico Mermaid de forma nativa no Streamlit
+                                link_org_func = f'  {id_org} --> {id_func};\n'
+                                if link_org_func not in linhas:
+                                    mermaid_code += link_org_func
+                                    linhas.add(link_org_func)
+                                    
+                                # 3. Cria o Nó do Nome (Ex: Zé Gotinha) e Liga com a Função
+                                if nome.upper() not in ["NAN", "N/I", "", "-"]:
+                                    id_nome = safe_id(org + func + nome + "_nome")
+                                    if id_nome not in nos_add:
+                                        mermaid_code += f'  {id_nome}["👤 {nome}"];\n'
+                                        nos_add.add(id_nome)
+                                    
+                                    link_func_nome = f'  {id_func} --> {id_nome};\n'
+                                    if link_func_nome not in linhas:
+                                        mermaid_code += link_func_nome
+                                        linhas.add(link_func_nome)
+
                     st.markdown(f"```mermaid\n{mermaid_code}\n```")
 
                 with aba_tabela:
