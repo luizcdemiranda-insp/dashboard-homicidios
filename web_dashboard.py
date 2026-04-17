@@ -128,6 +128,17 @@ def carregar_dados_notion():
                     linha[nome_coluna] = val.get("start") if val else ""
                 elif tipo == "checkbox":
                     linha[nome_coluna] = dados_coluna.get("checkbox")
+                
+                # --- NOVA REGRA PARA ARQUIVOS E IMAGENS ---
+                elif tipo == "files":
+                    arquivos = dados_coluna.get("files", [])
+                    if arquivos:
+                        # Pega o nome do primeiro arquivo para deixar a tabela limpa
+                        linha[nome_coluna] = arquivos[0].get("name", "Arquivo Anexado")
+                    else:
+                        linha[nome_coluna] = ""
+                # ------------------------------------------
+
                 else:
                     linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
                     
