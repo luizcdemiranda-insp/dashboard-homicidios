@@ -10,6 +10,9 @@ from email.mime.multipart import MIMEMultipart
 import requests
 import folium
 from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
+from folium.plugins import Draw
+import time
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -81,20 +84,19 @@ def carregar_dados():
 # =====================================================================
 # 2.5 CARGA DE DADOS DO NOTION
 # =====================================================================
-@st.cache_data(ttl=600) # Atualiza automaticamente a cada 10 minutos
+@st.cache_data(ttl=600)
 def carregar_dados_notion():
     try:
         token = st.secrets["notion"]["token"]
         database_id = st.secrets["notion"]["database_id"]
         
-        url = f"https://api.notion.com/v1/databases/{database_id}/query" # Endpoint corrigido
+        url = f"https://api.notion.com/v1/databases/{database_id}/query"
         headers = {
             "Authorization": f"Bearer {token}",
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
         }
         
-        # Envia a tropa para buscar os dados
         response = requests.post(url, headers=headers)
         
         if response.status_code != 200:
@@ -104,7 +106,6 @@ def carregar_dados_notion():
         dados_brutos = response.json().get("results", [])
         linhas = []
         
-        # O Notion entrega os dados "empacotados". Aqui nós desempacotamos coluna por coluna:
         for item in dados_brutos:
             props = item.get("properties", {})
             linha = {}
@@ -114,12 +115,9 @@ def carregar_dados_notion():
                 if tipo == "title":
                     vals = dados_coluna.get("title", [])
                     linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
-                    
-                # UPGRADE: Agora junta todas as palavras e menções sem quebrar
                 elif tipo == "rich_text":
                     vals = dados_coluna.get("rich_text", [])
                     linha[nome_coluna] = "".join([v.get("plain_text", "") for v in vals])
-                    
                 elif tipo == "select":
                     val = dados_coluna.get("select")
                     linha[nome_coluna] = val.get("name") if val else ""
@@ -133,17 +131,12 @@ def carregar_dados_notion():
                     linha[nome_coluna] = val.get("start") if val else ""
                 elif tipo == "checkbox":
                     linha[nome_coluna] = dados_coluna.get("checkbox")
-                
-                # --- NOVA REGRA PARA CONEXÕES (RELATION) ---
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
-                    # Como a API só manda o ID, mostramos a quantidade de vínculos
                     if relacoes:
                         linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)"
                     else:
                         linha[nome_coluna] = ""
-                        
-                # --- NOVA REGRA PARA AGREGAÇÃO (ROLLUP) ---
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
                     if rollup.get("type") == "array":
@@ -157,8 +150,6 @@ def carregar_dados_notion():
                         linha[nome_coluna] = ", ".join(textos)
                     else:
                         linha[nome_coluna] = "Agregação"
-                        
-                # --- REGRA PARA ARQUIVOS E IMAGENS (MANTIDA) ---
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
@@ -171,7 +162,6 @@ def carregar_dados_notion():
                             linha[nome_coluna] = arq.get("name", "")
                     else:
                         linha[nome_coluna] = ""
-                
                 else:
                     linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
                     
@@ -182,7 +172,75 @@ def carregar_dados_notion():
     except Exception as e:
         st.error(f"Erro no sistema de extração do Notion: {e}")
         return pd.DataFrame()
+
+# =====================================================================
+# 2.6 GEOLOCALIZADOR E MAPA
+# =====================================================================
+geolocator = Nominatim(user_agent="monitor_homicidios_app")
+
+@st.cache_data
+def geocodificar_endereco(endereco):
+    try:
+        location = geolocator.geocode(endereco)
+        if location:
+            return location.latitude, location.longitude
+        return None, None
+    except:
+        return None, None
+
+def pagina_mapa():
+    st.header("📍 GEOPROCESSAMENTO E ANÁLISE TERRITORIAL")
+    
+    df = carregar_dados() 
+    
+    with st.expander("🌐 Processar Pontos da Planilha", expanded=False):
+        st.write("Convertendo endereços em marcadores...")
+        pontos_mapeados = []
         
+        for index, row in df.head(10).iterrows():
+            endereco_completo = f"{row.get('LOGRADOURO', '')}, {row.get('BAIRRO', '')}, {row.get('MUNICÍPIO', '')}, RJ, Brasil"
+            lat, lon = geocodificar_endereco(endereco_completo)
+            if lat:
+                pontos_mapeados.append({
+                    "lat": lat, 
+                    "lon": lon, 
+                    "info": f"<b>Local:</b> {row.get('LOGRADOURO', '')}<br><b>Bairro:</b> {row.get('BAIRRO', '')}"
+                })
+            time.sleep(1)
+
+    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
+
+    folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri',
+        name='Vista de Satélite (High Res)'
+    ).add_to(m)
+
+    Draw(
+        export=False,
+        position='topleft',
+        draw_options={
+            'polyline': True,
+            'rectangle': True,
+            'polygon': True,
+            'circle': False,
+            'marker': True,
+            'circlemarker': False
+        }
+    ).add_to(m)
+
+    for p in pontos_mapeados:
+        folium.Marker(
+            [p['lat'], p['lon']], 
+            popup=folium.Popup(p['info'], max_width=300), 
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+
+    st_folium(m, width=1200, height=600, returned_objects=[])
+
 # =====================================================================
 # 3. INTERFACE DE ACESSO
 # =====================================================================
@@ -226,20 +284,17 @@ def tela_acesso():
             st.markdown("### 📝 Solicitação de Acesso")
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
             m_cad = st.text_input("Matrícula", key="cad_mat_input")
-            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input") # Adicionado campo de senha
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
             
             if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     try:
-                        # Gera o Hash da senha escolhida na hora
                         senha_hash = gerar_hash(s_cad)
                         
-                        # Configurações do e-mail (pegando do Secrets)
                         email_remetente = st.secrets["email"]["remetente"]
                         email_senha = st.secrets["email"]["senha"]
                         email_destino = "luizcdemiranda.insp@gmail.com"
 
-                        # Criando o corpo do e-mail com a senha e o Hash
                         corpo = f"""
                         NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
                         
@@ -263,7 +318,6 @@ def tela_acesso():
                         msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
                         msg.attach(MIMEText(corpo, 'plain'))
 
-                        # Envio via Servidor Gmail
                         server = smtplib.SMTP('smtp.gmail.com', 587)
                         server.starttls()
                         server.login(email_remetente, email_senha)
@@ -320,7 +374,6 @@ def gerar_dashboard(df_filtrado):
 
     st.write("<br>", unsafe_allow_html=True)
 
-    # --- INÍCIO DOS CARDS DE ORCRIM ---
     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
     
     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
@@ -339,7 +392,6 @@ def gerar_dashboard(df_filtrado):
             if "MILÍCIA" in texto or "MILICIA" in texto: return "MILÍCIA"
             return "OUTROS"
 
-        # Cópia para não dar aviso no Pandas
         df_filtrado_orcrim = df_filtrado.copy()
         df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
         
@@ -359,44 +411,6 @@ def gerar_dashboard(df_filtrado):
         with card4:
             st.markdown(f'<div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;"><h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4><h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2></div>', unsafe_allow_html=True)
 
-def pagina_mapa():
-    st.header("📍 GEOPROCESSAMENTO: MAPA CRIMINAL")
-    st.write("Visualização de áreas demarcadas e pontos de interesse.")
-
-    # 1. Configuração Inicial do Mapa (Centro no RJ como exemplo)
-    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=12, tiles="cartodbpositron")
-
-    # 2. EXEMPLO DE CAMADA (Layer/Polígono): Área de Influência
-    # Aqui você poderia puxar coordenadas de uma tabela
-    area_conflito = [
-        [-22.92, -43.20], [-22.94, -43.20], 
-        [-22.94, -43.22], [-22.92, -43.22]
-    ]
-    folium.Polygon(
-        locations=area_conflito,
-        color="red",
-        fill=True,
-        fill_color="red",
-        fill_opacity=0.3,
-        popup="ÁREA DE RISCO 01"
-    ).add_to(m)
-
-    # 3. EXEMPLO DE PONTOS (Markers): Ocorrências
-    pontos_teste = [
-        {"loc": [-22.915, -43.180], "pop": "Ocorrência A"},
-        {"loc": [-22.930, -43.190], "pop": "Ocorrência B"}
-    ]
-
-    for p in pontos_teste:
-        folium.Marker(
-            location=p["loc"],
-            popup=p["pop"],
-            icon=folium.Icon(color="darkred", icon="info-sign")
-        ).add_to(m)
-
-    # Renderiza o mapa no Streamlit
-    st_folium(m, width=1200, height=600)
-    
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
 # =====================================================================
@@ -559,7 +573,6 @@ else:
                 config_colunas = {}
                 for col in df_filtrado_notion.columns:
                     if "FOTO" in col.upper() or "IMAGEM" in col.upper():
-                        # ALTERE ESTA LINHA ABAIXO:
                         config_colunas[col] = st.column_config.ImageColumn(col, width="small") 
                     elif df_filtrado_notion[col].astype(str).str.startswith("http").any():
                         config_colunas[col] = st.column_config.LinkColumn(col, display_text="🔗 Acessar")
@@ -575,87 +588,8 @@ else:
             st.write("Aguardando integração das tabelas correspondentes.")
             
     elif menu == "3. MAPA":
-        from geopy.geocoders import Nominatim
-from folium.plugins import Draw
-import time
+        pagina_mapa()
 
-# Criar um geocodificador (Serviço gratuito Nominatim)
-geolocator = Nominatim(user_agent="monitor_homicidios_app")
-
-@st.cache_data
-def geocodificar_endereco(endereco):
-    try:
-        location = geolocator.geocode(endereco)
-        if location:
-            return location.latitude, location.longitude
-        return None, None
-    except:
-        return None, None
-
-def pagina_mapa():
-    st.header("📍 GEOPROCESSAMENTO E ANÁLISE TERRITORIAL")
-    
-    # --- CARGA E GEOCODIFICAÇÃO ---
-    df = carregar_dados() 
-    
-    with st.expander("🌐 Processar Pontos da Planilha", expanded=False):
-        st.write("Convertendo endereços em marcadores...")
-        pontos_mapeados = []
-        
-        # Teste com as 10 primeiras linhas para garantir performance
-        for index, row in df.head(10).iterrows():
-            # Monta o endereço concatenando as colunas do seu Sheets
-            endereco_completo = f"{row['LOGRADOURO']}, {row['BAIRRO']}, {row['MUNICÍPIO']}, RJ, Brasil"
-            lat, lon = geocodificar_endereco(endereco_completo)
-            if lat:
-                pontos_mapeados.append({
-                    "lat": lat, 
-                    "lon": lon, 
-                    "info": f"<b>Local:</b> {row['LOGRADOURO']}<br><b>Bairro:</b> {row['BAIRRO']}"
-                })
-            time.sleep(1) # Respeita o limite de 1 segundo por requisição do Nominatim
-
-    # --- CONFIGURAÇÃO DO MAPA ---
-    # Centralizado no Rio de Janeiro
-    m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
-
-    # 1. Camadas de Fundo (Escolha entre Ruas ou Satélite)
-    folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
-    folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri',
-        name='Vista de Satélite (High Res)'
-    ).add_to(m)
-
-    # 2. Ferramenta de Desenho (Apenas Visual/Rascunho)
-    # Permite desenhar polígonos, retângulos e marcadores na hora
-    Draw(
-        export=False, # Desativado para não gerar arquivos extras
-        position='topleft',
-        draw_options={
-            'polyline': True,
-            'rectangle': True,
-            'polygon': True,
-            'circle': False,
-            'marker': True,
-            'circlemarker': False
-        }
-    ).add_to(m)
-
-    # 3. Plotagem dos Pontos Geocodificados
-    for p in pontos_mapeados:
-        folium.Marker(
-            [p['lat'], p['lon']], 
-            popup=folium.Popup(p['info'], max_width=300), 
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(m)
-
-    # 4. Controle de Camadas (Habilita o seletor no canto superior direito)
-    folium.LayerControl().add_to(m)
-
-    # Renderiza o mapa de forma estática (sem capturar retorno de desenhos)
-    st_folium(m, width=1200, height=600, returned_objects=[])
-    
     elif menu == "4. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
         st.dataframe(df)
