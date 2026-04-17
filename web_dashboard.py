@@ -194,27 +194,49 @@ def pagina_mapa():
     df = carregar_dados() 
     
     with st.expander("🌐 Processar Pontos da Planilha", expanded=False):
-        st.write("Convertendo endereços em marcadores...")
+        st.write("Convertendo endereços em marcadores. Isso pode levar alguns minutos dependendo do tamanho da planilha...")
         pontos_mapeados = []
         
-        for index, row in df.head(10).iterrows():
+        # --- REMOVIDA A TRAVA DE 10 LINHAS ---
+        # Adicionada uma barra de progresso visual
+        df_validos = df.dropna(subset=['LOGRADOURO', 'BAIRRO']).copy()
+        total_linhas = len(df_validos)
+        
+        # Se for muita coisa, vamos limitar a 100 por segurança temporária, 
+        # mas você pode tirar o .head(100) quando quiser testar tudo.
+        df_processar = df_validos.head(100) 
+        
+        barra_progresso = st.progress(0)
+        texto_progresso = st.empty()
+        
+        for i, (index, row) in enumerate(df_processar.iterrows()):
             endereco_completo = f"{row.get('LOGRADOURO', '')}, {row.get('BAIRRO', '')}, {row.get('MUNICÍPIO', '')}, RJ, Brasil"
             lat, lon = geocodificar_endereco(endereco_completo)
+            
             if lat:
                 pontos_mapeados.append({
                     "lat": lat, 
                     "lon": lon, 
                     "info": f"<b>Local:</b> {row.get('LOGRADOURO', '')}<br><b>Bairro:</b> {row.get('BAIRRO', '')}"
                 })
-            time.sleep(1)
+                
+            # Atualiza a barra de progresso
+            percentual = int(((i + 1) / len(df_processar)) * 100)
+            barra_progresso.progress(percentual)
+            texto_progresso.text(f"Processando endereço {i+1} de {len(df_processar)}...")
+            
+            time.sleep(1) # Respeito ao servidor gratuito (Obrigatório)
+            
+        st.success(f"Geocodificação concluída! {len(pontos_mapeados)} locais encontrados com sucesso.")
 
     m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
 
-    folium.TileLayer('openstreetmap', name='Mapa de Ruas (OpenStreetMap)').add_to(m)
+    # 1. Camadas de Fundo (Agora com Google Hybrid)
+    folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
     folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri',
-        name='Vista de Satélite (High Res)'
+        tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}',
+        attr='Google',
+        name='Satélite com Ruas (Google)'
     ).add_to(m)
 
     Draw(
@@ -230,11 +252,16 @@ def pagina_mapa():
         }
     ).add_to(m)
 
+    # 3. Plotagem Tática (Círculos de Incidência em vez de Alfinetes Quebrados)
     for p in pontos_mapeados:
-        folium.Marker(
-            [p['lat'], p['lon']], 
+        folium.CircleMarker(
+            location=[p['lat'], p['lon']], 
+            radius=7, # Tamanho da bolinha
             popup=folium.Popup(p['info'], max_width=300), 
-            icon=folium.Icon(color='red', icon='info-sign')
+            color='#8B0000', # Borda vermelho escuro
+            fill=True,
+            fill_color='#FF0000', # Preenchimento vermelho forte
+            fill_opacity=0.7
         ).add_to(m)
 
     folium.LayerControl().add_to(m)
