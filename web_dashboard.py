@@ -133,8 +133,14 @@ def carregar_dados_notion():
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
-                        # Pega o nome do primeiro arquivo para deixar a tabela limpa
-                        linha[nome_coluna] = arquivos[0].get("name", "Arquivo Anexado")
+                        arq = arquivos[0] # Pega o primeiro arquivo
+                        # Busca o link da imagem/pdf para poder exibir
+                        if "file" in arq:
+                            linha[nome_coluna] = arq["file"].get("url", "")
+                        elif "external" in arq:
+                            linha[nome_coluna] = arq["external"].get("url", "")
+                        else:
+                            linha[nome_coluna] = arq.get("name", "")
                     else:
                         linha[nome_coluna] = ""
                 # ------------------------------------------
