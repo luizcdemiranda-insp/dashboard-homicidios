@@ -234,4 +234,9 @@ def render_card(titulo, valor, cor):
     st.markdown(html, unsafe_allow_html=True)
 
 def gerar_dashboard(df_filtrado):
-    COL_DIA = next((
+    # Dica: Se for colar, certifique-se de que cada uma destas 3 variáveis fique em uma única linha!
+    COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
+    COL_CIRCUNSCRICAO = next((c for c in df_filtrado.columns if "CIRCUNSCRI" in str(c)), None)
+    COL_VITIMAS = next((c for c in df_filtrado.columns if "VÍTIMAS" in str(c) or "VITIMAS" in str(c)), None)
+
+    total_procedimentos = len(df_filtrado)
