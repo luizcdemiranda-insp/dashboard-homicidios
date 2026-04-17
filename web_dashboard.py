@@ -17,11 +17,9 @@ from folium.plugins import Draw
 # =====================================================================
 st.set_page_config(page_title="🛡️ Monitoramento de Homicídios", layout="wide")
 
-# IDs das Planilhas
 ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 ID_PLANILHA_CRIMES = "1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc"
 
-# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
     div[role="radiogroup"] > label > div:first-child,
@@ -54,7 +52,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Funções de Segurança
 def gerar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
@@ -79,9 +76,6 @@ def carregar_dados():
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     return df
 
-# =====================================================================
-# 2.5 CARGA DE DADOS DO NOTION
-# =====================================================================
 @st.cache_data(ttl=600)
 def carregar_dados_notion():
     try:
@@ -131,10 +125,7 @@ def carregar_dados_notion():
                     linha[nome_coluna] = dados_coluna.get("checkbox")
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
-                    if relacoes:
-                        linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)"
-                    else:
-                        linha[nome_coluna] = ""
+                    linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)" if relacoes else ""
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
                     if rollup.get("type") == "array":
@@ -152,35 +143,30 @@ def carregar_dados_notion():
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
                         arq = arquivos[0]
-                        if "file" in arq:
-                            linha[nome_coluna] = arq["file"].get("url", "")
-                        elif "external" in arq:
-                            linha[nome_coluna] = arq["external"].get("url", "")
-                        else:
-                            linha[nome_coluna] = arq.get("name", "")
+                        if "file" in arq: linha[nome_coluna] = arq["file"].get("url", "")
+                        elif "external" in arq: linha[nome_coluna] = arq["external"].get("url", "")
+                        else: linha[nome_coluna] = arq.get("name", "")
                     else:
                         linha[nome_coluna] = ""
                 else:
                     linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
                     
             linhas.append(linha)
-            
         return pd.DataFrame(linhas)
-        
     except Exception as e:
         st.error(f"Erro no sistema de extração do Notion: {e}")
         return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOPROCESSAMENTO E MAPA (NOVO MÉTODO)
+# 2.6 GEOPROCESSAMENTO E MAPA (NOVO MÉTODO DIRETO)
 # =====================================================================
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
     
     df = carregar_dados()
     
-    col_lat = next((c for c in df.columns if "LAT" in c), None)
-    col_lon = next((c for c in df.columns if "LON" in c), None)
+    col_lat = next((c for c in df.columns if "LAT" in c.upper()), None)
+    col_lon = next((c for c in df.columns if "LON" in c.upper()), None)
 
     if col_lat and col_lon:
         df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
@@ -249,10 +235,9 @@ def tela_acesso():
                     df_users.columns = [str(col).strip().upper() for col in df_users.columns]
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
                     mat_login_limpa = str(mat_login).strip()
-                    
                     senha_hash = gerar_hash(senha_login)
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & (df_users['SENHA'] == senha_hash)]
                     
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & (df_users['SENHA'] == senha_hash)]
                     if not user_match.empty:
                         status = str(user_match.iloc[0]['STATUS']).strip().upper()
                         if status == 'APROVADO':
@@ -265,7 +250,7 @@ def tela_acesso():
                     else:
                         st.error("Matrícula ou Senha incorretos.")
                 except Exception as e:
-                    st.error("Erro na base de usuários. Verifique se a planilha está como 'Qualquer pessoa com o link'.")
+                    st.error("Erro na base de usuários.")
 
         with aba_cadastro:
             st.markdown("### 📝 Solicitação de Acesso")
@@ -277,27 +262,15 @@ def tela_acesso():
                 if n_cad and m_cad and s_cad:
                     try:
                         senha_hash = gerar_hash(s_cad)
-                        
                         email_remetente = st.secrets["email"]["remetente"]
                         email_senha = st.secrets["email"]["senha"]
                         email_destino = "luizcdemiranda.insp@gmail.com"
 
-                        corpo = f"""
-                        NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
-                        
+                        corpo = f"""NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
                         Nome: {n_cad}
                         Matrícula: {m_cad}
                         Senha Escolhida: {s_cad}
-                        
-                        Hash SHA256 (Copie este código para a planilha):
-                        {senha_hash}
-                        
-                        Instruções para o Master:
-                        1. Verifique a identidade do servidor.
-                        2. Acesse a planilha de usuários.
-                        3. Adicione o Nome, Matrícula e cole o Hash SHA256 acima na coluna SENHA.
-                        4. Defina o Status como 'Aprovado'.
-                        """
+                        Hash SHA256: {senha_hash}"""
 
                         msg = MIMEMultipart()
                         msg['From'] = email_remetente
@@ -311,14 +284,11 @@ def tela_acesso():
                         server.send_message(msg)
                         server.quit()
 
-                        st.success("✅ Solicitação enviada! O Administrador fará a liberação.")
-                        st.info("Sua senha foi registrada de forma segura.")
-                        
+                        st.success("✅ Solicitação enviada!")
                     except Exception as e:
                         st.error(f"Erro ao processar solicitação: {e}")
-                        st.info("Certifique-se de configurar as credenciais de e-mail no painel de Secrets.")
                 else:
-                    st.warning("Por favor, preencha todos os campos, incluindo a senha.")
+                    st.warning("Preencha todos os campos.")
 
 # =====================================================================
 # 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
@@ -333,7 +303,8 @@ def gerar_dashboard(df_filtrado):
     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
         vitimas_raw = df_filtrado[COL_VITIMAS]
         total_vitimas = pd.to_numeric(vitimas_raw.astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
-    else: total_vitimas = 0
+    else: 
+        total_vitimas = 0
 
     c1, c2 = st.columns(2)
     
@@ -381,7 +352,6 @@ def gerar_dashboard(df_filtrado):
     st.write("<br>", unsafe_allow_html=True)
 
     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
-    
     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
     col_orcrim = sugestoes_orcrim[0] if sugestoes_orcrim else (df_filtrado.columns[30] if len(df_filtrado.columns) > 30 else None)
 
@@ -408,127 +378,23 @@ def gerar_dashboard(df_filtrado):
 
         card1, card2, card3, card4 = st.columns(4)
         
-        html_card1 = f"""
+        html_c1 = f"""
         <div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #F1C40F; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;">
             <h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">EM INVESTIGAÇÃO</h4>
             <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_investiga}</h2>
         </div>
         """
-        with card1: st.markdown(html_card1, unsafe_allow_html=True)
+        with card1: st.markdown(html_c1, unsafe_allow_html=True)
         
-        html_card2 = f"""
+        html_c2 = f"""
         <div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #E74C3C; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;">
             <h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">TRÁFICO</h4>
             <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_trafico}</h2>
         </div>
         """
-        with card2: st.markdown(html_card2, unsafe_allow_html=True)
+        with card2: st.markdown(html_c2, unsafe_allow_html=True)
         
-        html_card3 = f"""
+        html_c3 = f"""
         <div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #3498DB; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;">
             <h4 style="margin: 0; color: #b0b4c4; font-size: 14px;">MILÍCIA</h4>
-            <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_milicia}</h2>
-        </div>
-        """
-        with card3: st.markdown(html_card3, unsafe_allow_html=True)
-        
-        html_card4 = f"""
-        <div style="background-color: #1E2130; padding: 20px; border-radius: 10px; border-top: 5px solid #9B59B6; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); height: 100%;">
-            <h4 style="margin: 0; color: #b0b4c4; font-size: 13px;">TRÁFICO X MILÍCIA</h4>
-            <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_traf_mil}</h2>
-        </div>
-        """
-        with card4: st.markdown(html_card4, unsafe_allow_html=True)
-
-# =====================================================================
-# 5. LÓGICA DE NAVEGAÇÃO (LOGADO)
-# =====================================================================
-if not st.session_state.logado:
-    tela_acesso()
-else:
-    st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
-    
-    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
-    if st.session_state.user_nivel == "Master":
-        lista_menu.append("⚙️ CONFIGURAÇÕES")
-        
-    menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
-
-    # --- LÓGICA DE SUBMENU PARA ORCRIM ---
-    sub_menu_orcrim = None
-    if menu == "2. ORCRIM":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("📂 **SELECIONE A ÁREA:**")
-        sub_menu_orcrim = st.sidebar.radio("", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"], label_visibility="collapsed")
-
-    if st.sidebar.button("Sair"):
-        st.session_state.logado = False
-        st.rerun()
-
-# ==========================================================
-# ---> CABEÇALHO OFICIAL (COM LOGOS) <---
-# ==========================================================
-    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-    with col_esq:
-        try: st.image("logo1.png", width=150)
-        except: st.write("")
-    with col_meio:
-        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    with col_dir:
-        try: st.image("logo2.png", width=150)
-        except: st.write("")
-    st.write("---")
-# ==========================================================
-    
-    df = carregar_dados()
-
-    if menu == "1. VISÃO GERAL":
-        st.header("📊 VISÃO GERAL")
-        
-        df['ANO'] = df['ANO'].astype(int).astype(str)
-        anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        
-        st.subheader("FILTROS DE ANÁLISE")
-        modo_analise = st.radio("SELECIONE O FORMATO DA ANÁLISE:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
-
-        anos_selecionados = []
-        
-        if modo_analise == "ANÁLISE INDIVIDUAL":
-            col_drop, _ = st.columns([2, 8]) 
-            ano_escolhido = col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind_vg")
-            anos_selecionados = [ano_escolhido]
-            
-        else:
-            st.write("**SELECIONE OS ANOS PARA COMPARAR:**")
-            
-            def selecionar_todos_vg():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
-            def limpar_selecao_vg():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
-
-            for ano in anos_disp:
-                if f"chk_vg_{ano}" not in st.session_state:
-                    st.session_state[f"chk_vg_{ano}"] = True
-
-            b1, b2, _ = st.columns([2, 2, 6])
-            b1.button("✓ Todos os anos", on_click=selecionar_todos_vg, key="btn_all_vg")
-            b2.button("✗ Limpar seleção", on_click=limpar_selecao_vg, key="btn_clear_vg")
-            
-            colunas_anos = st.columns(min(len(anos_disp), 8) or 1, gap="small")
-            for i, ano in enumerate(anos_disp):
-                colunas_anos[i % len(colunas_anos)].checkbox(ano, key=f"chk_vg_{ano}")
-            
-            anos_selecionados = [ano for ano in anos_disp if st.session_state.get(f"chk_vg_{ano}", False)]
-
-        if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
-            st.write("---")
-            if df_filtrado.empty:
-                st.warning("Nenhuma ocorrência encontrada para os anos selecionados.")
-            else:
-                gerar_dashboard(df_filtrado)
-        else:
-            st.warning("⚠️ Selecione pelo menos um ano para visualizar os dados.")
-
-    elif menu == "2. ORCRIM":
-        if sub_menu_
+            <h2 style="margin: 15px 0 0 0; color: white; font-size: 54px; line-height: 1;">{tot_
