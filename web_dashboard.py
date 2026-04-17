@@ -112,9 +112,12 @@ def carregar_dados_notion():
                 if tipo == "title":
                     vals = dados_coluna.get("title", [])
                     linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
+                    
+                # UPGRADE: Agora junta todas as palavras e menções sem quebrar
                 elif tipo == "rich_text":
                     vals = dados_coluna.get("rich_text", [])
-                    linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
+                    linha[nome_coluna] = "".join([v.get("plain_text", "") for v in vals])
+                    
                 elif tipo == "select":
                     val = dados_coluna.get("select")
                     linha[nome_coluna] = val.get("name") if val else ""
@@ -129,12 +132,35 @@ def carregar_dados_notion():
                 elif tipo == "checkbox":
                     linha[nome_coluna] = dados_coluna.get("checkbox")
                 
-                # --- NOVA REGRA PARA ARQUIVOS E IMAGENS ---
+                # --- NOVA REGRA PARA CONEXÕES (RELATION) ---
+                elif tipo == "relation":
+                    relacoes = dados_coluna.get("relation", [])
+                    # Como a API só manda o ID, mostramos a quantidade de vínculos
+                    if relacoes:
+                        linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)"
+                    else:
+                        linha[nome_coluna] = ""
+                        
+                # --- NOVA REGRA PARA AGREGAÇÃO (ROLLUP) ---
+                elif tipo == "rollup":
+                    rollup = dados_coluna.get("rollup", {})
+                    if rollup.get("type") == "array":
+                        vals = rollup.get("array", [])
+                        textos = []
+                        for v in vals:
+                            if v.get("type") == "title":
+                                textos.append("".join([t.get("plain_text", "") for t in v.get("title", [])]))
+                            elif v.get("type") == "rich_text":
+                                textos.append("".join([t.get("plain_text", "") for t in v.get("rich_text", [])]))
+                        linha[nome_coluna] = ", ".join(textos)
+                    else:
+                        linha[nome_coluna] = "Agregação"
+                        
+                # --- REGRA PARA ARQUIVOS E IMAGENS (MANTIDA) ---
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
-                        arq = arquivos[0] # Pega o primeiro arquivo
-                        # Busca o link da imagem/pdf para poder exibir
+                        arq = arquivos[0]
                         if "file" in arq:
                             linha[nome_coluna] = arq["file"].get("url", "")
                         elif "external" in arq:
@@ -143,8 +169,7 @@ def carregar_dados_notion():
                             linha[nome_coluna] = arq.get("name", "")
                     else:
                         linha[nome_coluna] = ""
-                # ------------------------------------------
-
+                
                 else:
                     linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
                     
