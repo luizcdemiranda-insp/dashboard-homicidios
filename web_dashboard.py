@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 import requests
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import Draw
+from folium.plugins import Draw, MarkerCluster
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -162,7 +162,7 @@ def carregar_dados_notion():
         return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOPROCESSAMENTO E MAPA
+# 2.6 GEOPROCESSAMENTO E MAPA (AGRUPADOR TÁTICO E BALÕES INTELIGENTES)
 # =====================================================================
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
@@ -194,14 +194,35 @@ def pagina_mapa():
 
         Draw(export=False, position='topleft').add_to(m)
 
+        # Mapeamento Inteligente de Colunas para o Balão
+        col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
+        col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
+        col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
+        col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
+        col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
+
+        # Inicializa o Agrupador de Marcadores (MarkerCluster)
+        mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
+
         for _, row in df_mapa.iterrows():
-            popup_texto = f"<b>Data:</b> {row.get('DATA', 'S/D')}<br><b>Local:</b> {row.get('LOGRADOURO', 'S/D')}"
-            folium.CircleMarker(
+            
+            # Construção do Balão Formato Tático em HTML
+            html_popup = f"""
+            <div style='min-width: 220px; font-family: sans-serif;'>
+                <h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4>
+                <hr style='margin: 5px 0;'>
+                <b>Delito:</b> {row.get(col_delito, 'N/I')}<br>
+                <b>Data:</b> {row.get(col_data, 'N/I')}<br>
+                <b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br>
+                <b>Local:</b> {row.get(col_local, 'N/I')}
+            </div>
+            """
+            
+            folium.Marker(
                 location=[row[col_lat], row[col_lon]],
-                radius=6,
-                popup=folium.Popup(popup_texto, max_width=300),
-                color='#8B0000', fill=True, fill_color='#FF0000', fill_opacity=0.6
-            ).add_to(m)
+                popup=folium.Popup(html_popup, max_width=350),
+                icon=folium.Icon(color='darkred', icon='info-sign')
+            ).add_to(mc)
 
         folium.LayerControl().add_to(m)
         st_folium(m, width=1200, height=600, returned_objects=[])
@@ -278,7 +299,7 @@ def tela_acesso():
                     st.warning("Preencha todos os campos.")
 
 # =====================================================================
-# 4. DASHBOARD (Agora usando as funções blindadas)
+# 4. DASHBOARD 
 # =====================================================================
 def gerar_dashboard(df_filtrado):
     COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
