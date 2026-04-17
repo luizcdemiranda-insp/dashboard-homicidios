@@ -41,6 +41,14 @@ st.markdown("""
     section[data-testid="stSidebar"] div[role="radiogroup"] > label {
         justify-content: flex-start; padding-left: 20px;
     }
+    div[data-testid="stMainBlockContainer"] div[role="radiogroup"] {
+        display: flex; flex-direction: row; flex-wrap: wrap; gap: 15px; width: 100%;
+    }
+    @media (max-width: 768px) {
+        div[data-testid="stMainBlockContainer"] div[role="radiogroup"] { flex-direction: column; gap: 5px; }
+        h1 { font-size: 38px !important; }
+        h2 { font-size: 42px !important; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -78,113 +86,164 @@ def carregar_dados_notion():
         }
         response = requests.post(url, headers=headers)
         if response.status_code != 200: return pd.DataFrame()
+        
         dados_brutos = response.json().get("results", [])
         linhas = []
         for item in dados_brutos:
             props = item.get("properties", {})
-            linha = {nome: str(d.get(d.get("type"), "")) for nome, d in props.items()}
+            linha = {}
+            for nome_coluna, dados_coluna in props.items():
+                tipo = dados_coluna.get("type")
+                if tipo == "title":
+                    vals = dados_coluna.get("title", [])
+                    linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
+                elif tipo == "rich_text":
+                    vals = dados_coluna.get("rich_text", [])
+                    linha[nome_coluna] = "".join([v.get("plain_text", "") for v in vals])
+                elif tipo == "select":
+                    val = dados_coluna.get("select")
+                    linha[nome_coluna] = val.get("name") if val else ""
+                elif tipo == "multi_select":
+                    vals = dados_coluna.get("multi_select", [])
+                    linha[nome_coluna] = ", ".join([v.get("name") for v in vals])
+                elif tipo == "number":
+                    linha[nome_coluna] = dados_coluna.get("number")
+                elif tipo == "date":
+                    val = dados_coluna.get("date")
+                    linha[nome_coluna] = val.get("start") if val else ""
+                elif tipo == "checkbox":
+                    linha[nome_coluna] = dados_coluna.get("checkbox")
+                elif tipo == "relation":
+                    relacoes = dados_coluna.get("relation", [])
+                    linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)" if relacoes else ""
+                elif tipo == "rollup":
+                    rollup = dados_coluna.get("rollup", {})
+                    if rollup.get("type") == "array":
+                        vals = rollup.get("array", [])
+                        textos = []
+                        for v in vals:
+                            if v.get("type") == "title":
+                                textos.append("".join([t.get("plain_text", "") for t in v.get("title", [])]))
+                            elif v.get("type") == "rich_text":
+                                textos.append("".join([t.get("plain_text", "") for t in v.get("rich_text", [])]))
+                        linha[nome_coluna] = ", ".join(textos)
+                    else:
+                        linha[nome_coluna] = "Agregação"
+                elif tipo == "files":
+                    arquivos = dados_coluna.get("files", [])
+                    if arquivos:
+                        arq = arquivos[0]
+                        if "file" in arq: linha[nome_coluna] = arq["file"].get("url", "")
+                        elif "external" in arq: linha[nome_coluna] = arq["external"].get("url", "")
+                        else: linha[nome_coluna] = arq.get("name", "")
+                    else:
+                        linha[nome_coluna] = ""
+                else:
+                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
             linhas.append(linha)
         return pd.DataFrame(linhas)
-    except: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Erro no sistema Notion: {e}")
+        return pd.DataFrame()
 
 # =====================================================================
-# 3. GEOPROCESSAMENTO DIRETO (PONTOS GPS)
-# =====================================================================
-def pagina_mapa():
-    st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
-    
-    # 1. Obter dados e processar coordenadas das colunas M (Lat) e N (Lon)
-    df = carregar_dados()
-    
-    # Identifica colunas de Latitude e Longitude (Geralmente chamadas de LATITUDE e LONGITUDE no CSV)
-    # Se os nomes forem diferentes, ajustamos aqui.
-    col_lat = next((c for c in df.columns if "LATITUDE" in c or "LAT" in c), None)
-    col_lon = next((c for c in df.columns if "LONGITUDE" in c or "LON" in c), None)
-
-    if col_lat and col_lon:
-        # Limpeza Tática: Converte para número, força erro (#N/A) a virar nulo e remove nulos
-        df[col_lat] = pd.to_numeric(df[col_lat], errors='coerce')
-        df[col_lon] = pd.to_numeric(df[col_lon], errors='coerce')
-        df_mapa = df.dropna(subset=[col_lat, col_lon])
-        
-        st.success(f"✅ {len(df_mapa)} pontos localizados via coordenadas GPS.")
-
-        # 2. Configuração do Mapa
-        m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
-
-        # Camadas: Ruas e Satélite Híbrido (Google)
-        folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
-        folium.TileLayer(
-            tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Satélite com Ruas (Híbrido)'
-        ).add_to(m)
-
-        # Ferramenta de Desenho Visual
-        Draw(export=False, position='topleft').add_to(m)
-
-        # 3. Plotagem dos Círculos
-        for _, row in df_mapa.iterrows():
-            popup_texto = f"<b>Data:</b> {row.get('DATA', 'S/D')}<br><b>Local:</b> {row.get('LOGRADOURO', 'S/D')}"
-            folium.CircleMarker(
-                location=[row[col_lat], row[col_lon]],
-                radius=6,
-                popup=folium.Popup(popup_texto, max_width=300),
-                color='#8B0000',
-                fill=True,
-                fill_color='#FF0000',
-                fill_opacity=0.6
-            ).add_to(m)
-
-        folium.LayerControl().add_to(m)
-        st_folium(m, width=1200, height=600, returned_objects=[])
-    else:
-        st.error("⚠️ Colunas de Latitude/Longitude não encontradas na planilha.")
-
-# =====================================================================
-# 4. INTERFACE DE ACESSO E NAVEGAÇÃO
+# 3. INTERFACE DE ACESSO
 # =====================================================================
 def tela_acesso():
-    # ... (Sua função tela_acesso original se mantém aqui)
-    pass
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ ACESSO AO SISTEMA</h1>", unsafe_allow_html=True)
+        aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Solicitar Cadastro"])
+        
+        with aba_login:
+            mat_login = st.text_input("Matrícula", key="login_mat_input")
+            senha_login = st.text_input("Senha", type="password", key="login_pass_input")
+            
+            if st.button("Acessar Painel"):
+                try:
+                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
+                    df_users = pd.read_csv(url_users)
+                    df_users.columns = [str(col).strip().upper() for col in df_users.columns]
+                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
+                    mat_login_limpa = str(mat_login).strip()
+                    senha_hash = gerar_hash(senha_login)
+                    
+                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & (df_users['SENHA'] == senha_hash)]
+                    if not user_match.empty:
+                        status = str(user_match.iloc[0]['STATUS']).strip().upper()
+                        if status == 'APROVADO':
+                            st.session_state.logado = True
+                            st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
+                            st.session_state.user_nome = user_match.iloc[0]['NOME']
+                            st.rerun()
+                        else:
+                            st.warning(f"Acesso Pendente. Status atual: {status}")
+                    else:
+                        st.error("Matrícula ou Senha incorretos.")
+                except Exception as e:
+                    st.error("Erro na base de usuários. Verifique o acesso da planilha.")
 
-# Lógica de Navegação principal
-if not st.session_state.logado:
-    # Se você quiser simplificar para testes, pode setar logado=True aqui temporariamente
-    # st.session_state.logado = True 
-    # st.session_state.user_nome = "Comandante"
-    # st.session_state.user_nivel = "Master"
-    tela_acesso()
-else:
-    st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
-    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
-    if st.session_state.user_nivel == "Master": lista_menu.append("⚙️ CONFIGURAÇÕES")
-    menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
+        with aba_cadastro:
+            st.markdown("### 📝 Solicitação de Acesso")
+            n_cad = st.text_input("Nome Completo", key="cad_nome_input")
+            m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
+            
+            if st.button("Enviar Solicitação"):
+                if n_cad and m_cad and s_cad:
+                    try:
+                        senha_hash = gerar_hash(s_cad)
+                        email_remetente = st.secrets["email"]["remetente"]
+                        email_senha = st.secrets["email"]["senha"]
+                        email_destino = "luizcdemiranda.insp@gmail.com"
 
-    # Submenu ORCRIM
-    sub_menu_orcrim = None
-    if menu == "2. ORCRIM":
-        st.sidebar.markdown("---")
-        sub_menu_orcrim = st.sidebar.radio("📂 ÁREA:", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"])
+                        corpo = f"""
+                        NOVA SOLICITAÇÃO DE ACESSO - DASHBOARD
+                        Nome: {n_cad}
+                        Matrícula: {m_cad}
+                        Senha Escolhida: {s_cad}
+                        Hash SHA256: {senha_hash}
+                        """
 
-    if st.sidebar.button("Sair"):
-        st.session_state.logado = False
-        st.rerun()
+                        msg = MIMEMultipart()
+                        msg['From'] = email_remetente
+                        msg['To'] = email_destino
+                        msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
+                        msg.attach(MIMEText(corpo, 'plain'))
 
-    # Cabeçalho
-    st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    st.write("---")
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login(email_remetente, email_senha)
+                        server.send_message(msg)
+                        server.quit()
+                        st.success("✅ Solicitação enviada!")
+                    except Exception as e:
+                        st.error(f"Erro ao processar solicitação: {e}")
+                else:
+                    st.warning("Preencha todos os campos.")
 
-    if menu == "1. VISÃO GERAL":
-        df = carregar_dados()
-        # ... (Sua lógica de dashboard aqui)
-    elif menu == "2. ORCRIM":
-        if sub_menu_orcrim == "ÁREA 1":
-            df_notion = carregar_dados_notion()
-            st.dataframe(df_notion, use_container_width=True)
-    elif menu == "3. MAPA":
-        pagina_mapa()
-    elif menu == "4. MODO ANALÍTICO":
-        st.dataframe(carregar_dados())
-    elif menu == "5. ASSISTENTE IA":
-        st.write("Módulo de IA em desenvolvimento.")
+# =====================================================================
+# 4. FUNÇÃO REUTILIZÁVEL DO DASHBOARD
+# =====================================================================
+def gerar_dashboard(df_filtrado):
+    COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
+    COL_CIRCUNSCRICAO = next((c for c in df_filtrado.columns if "CIRCUNSCRI" in str(c)), None)
+    COL_VITIMAS = next((c for c in df_filtrado.columns if "VÍTIMAS" in str(c) or "VITIMAS" in str(c)), None)
+
+    total_procedimentos = len(df_filtrado)
+    if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
+        total_vitimas = pd.to_numeric(df_filtrado[COL_VITIMAS].astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
+    else: total_vitimas = 0
+
+    c1, c2 = st.columns(2)
+    with c1: st.markdown(f'<div style="background-color: #1E2130; padding: 25px; border-radius: 12px; border-top: 5px solid #ff4b4b; text-align: center;"><h3 style="color: #b0b4c4; font-size: 16px;">📊 TOTAL PROCEDIMENTOS</h3><h1 style="color: white; font-size: 48px;">{total_procedimentos:,}</h1></div>'.replace(',', '.'), unsafe_allow_html=True)
+    with c2: st.markdown(f'<div style="background-color: #1E2130; padding: 25px; border-radius: 12px; border-top: 5px solid #F1C40F; text-align: center;"><h3 style="color: #b0b4c4; font-size: 16px;">👤 TOTAL VÍTIMAS</h3><h1 style="color: white; font-size: 48px;">{int(total_vitimas):,}</h1></div>'.replace(',', '.'), unsafe_allow_html=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📅 POR DIA DA SEMANA")
+        if COL_DIA:
+            tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
+            tabela_dia = tabela_dia[~
