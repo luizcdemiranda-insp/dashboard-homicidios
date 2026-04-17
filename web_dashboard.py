@@ -11,6 +11,8 @@ import requests
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
+import re
+import streamlit.components.v1 as components
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -94,7 +96,11 @@ def carregar_dados_notion():
         token = st.secrets["notion"]["token"]
         database_id = st.secrets["notion"]["database_id"]
         url = f"https://api.notion.com/v1/databases/{database_id}/query"
-        headers = {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {token}", 
+            "Notion-Version": "2022-06-28", 
+            "Content-Type": "application/json"
+        }
         response = requests.post(url, headers=headers)
         if response.status_code != 200: return pd.DataFrame()
             
@@ -117,11 +123,13 @@ def carregar_dados_notion():
                 elif tipo == "multi_select":
                     vals = dados_coluna.get("multi_select", [])
                     linha[nome_coluna] = ", ".join([v.get("name") for v in vals])
-                elif tipo == "number": linha[nome_coluna] = dados_coluna.get("number")
+                elif tipo == "number": 
+                    linha[nome_coluna] = dados_coluna.get("number")
                 elif tipo == "date":
                     val = dados_coluna.get("date")
                     linha[nome_coluna] = val.get("start") if val else ""
-                elif tipo == "checkbox": linha[nome_coluna] = dados_coluna.get("checkbox")
+                elif tipo == "checkbox": 
+                    linha[nome_coluna] = dados_coluna.get("checkbox")
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
                     linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)" if relacoes else ""
@@ -131,17 +139,21 @@ def carregar_dados_notion():
                         vals = rollup.get("array", [])
                         textos = ["".join([t.get("plain_text", "") for t in v.get(v.get("type"), [])]) for v in vals]
                         linha[nome_coluna] = ", ".join(textos)
-                    else: linha[nome_coluna] = "Agregação"
+                    else: 
+                        linha[nome_coluna] = "Agregação"
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
                         arq = arquivos[0]
                         linha[nome_coluna] = arq.get("file", {}).get("url") or arq.get("external", {}).get("url") or arq.get("name", "")
-                    else: linha[nome_coluna] = ""
-                else: linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                    else: 
+                        linha[nome_coluna] = ""
+                else: 
+                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
             linhas.append(linha)
         return pd.DataFrame(linhas)
-    except: return pd.DataFrame()
+    except: 
+        return pd.DataFrame()
 
 # =====================================================================
 # 2.6 GEOPROCESSAMENTO E MAPA 
@@ -149,8 +161,12 @@ def carregar_dados_notion():
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
     df = carregar_dados()
-    col_lat = next((c for c in df.columns if "LAT" in c.upper()), None)
-    col_lon = next((c for c in df.columns if "LON" in c.upper()), None)
+    
+    col_lat = None
+    col_lon = None
+    for c in df.columns:
+        if "LAT" in c.upper(): col_lat = c
+        if "LON" in c.upper(): col_lon = c
 
     if col_lat and col_lon:
         df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
@@ -163,4 +179,473 @@ def pagina_mapa():
 
         m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
         folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
-        folium.TileLayer(tiles='http://mt0.
+        folium.TileLayer(
+            tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', 
+            attr='Google', 
+            name='Satélite Híbrido'
+        ).add_to(m)
+        Draw(export=False, position='topleft').add_to(m)
+
+        col_proc = "PROCEDIMENTO"
+        col_delito = "DELITO"
+        col_circ = "CIRCUNSCRIÇÃO"
+        col_data = "DATA"
+        col_local = "LOCAL"
+
+        for c in df_mapa.columns:
+            if "PROC" in c or "RO" == c or "REGISTRO" in c: col_proc = c
+            if "DELITO" in c or "NATUREZA" in c or "CRIME" in c: col_delito = c
+            if "CIRCUNSCRI" in c or "DP" == c: col_circ = c
+            if "DATA" in c: col_data = c
+            if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c: col_local = c
+
+        mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
+        for _, row in df_mapa.iterrows():
+            v_proc = row.get(col_proc, 'N/I')
+            v_delito = row.get(col_delito, 'N/I')
+            v_data = row.get(col_data, 'N/I')
+            v_circ = row.get(col_circ, 'N/I')
+            v_local = row.get(col_local, 'N/I')
+            
+            html_popup = f"""
+            <div style='min-width: 220px; font-family: sans-serif;'>
+                <h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{v_proc}</h4>
+                <hr style='margin: 5px 0;'>
+                <b>Delito:</b> {v_delito}<br>
+                <b>Data:</b> {v_data}<br>
+                <b>Circunscrição:</b> {v_circ}<br>
+                <b>Local:</b> {v_local}
+            </div>
+            """
+            folium.Marker(
+                location=[row[col_lat], row[col_lon]], 
+                popup=folium.Popup(html_popup, max_width=350), 
+                icon=folium.Icon(color='darkred', icon='info-sign')
+            ).add_to(mc)
+            
+        folium.LayerControl().add_to(m)
+        st_folium(m, width=1200, height=600, returned_objects=[])
+    else: 
+        st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+
+# =====================================================================
+# 3. INTERFACE DE ACESSO
+# =====================================================================
+def tela_acesso():
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ ACESSO AO SISTEMA</h1>", unsafe_allow_html=True)
+        aba_login, aba_cadastro = st.tabs(["🔐 Entrar", "📝 Solicitar Cadastro"])
+        
+        with aba_login:
+            mat_login = st.text_input("Matrícula", key="login_mat_input")
+            senha_login = st.text_input("Senha", type="password", key="login_pass_input")
+            if st.button("Acessar Painel"):
+                try:
+                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
+                    df_users = pd.read_csv(url_users)
+                    df_users.columns = [str(col).strip().upper() for col in df_users.columns]
+                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
+                    senha_hash = gerar_hash(senha_login)
+                    user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
+                    if not user_match.empty:
+                        if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
+                            st.session_state.logado = True
+                            st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
+                            st.session_state.user_nome = user_match.iloc[0]['NOME']
+                            st.rerun()
+                        else: st.warning("Acesso Pendente.")
+                    else: st.error("Matrícula ou Senha incorretos.")
+                except: st.error("Erro na base de usuários.")
+
+        with aba_cadastro:
+            n_cad = st.text_input("Nome Completo", key="cad_nome_input")
+            m_cad = st.text_input("Matrícula", key="cad_mat_input")
+            s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
+            if st.button("Enviar Solicitação"):
+                if n_cad and m_cad and s_cad:
+                    try:
+                        senha_hash = gerar_hash(s_cad)
+                        email_remetente = st.secrets["email"]["remetente"]
+                        email_senha = st.secrets["email"]["senha"]
+                        email_destino = "luizcdemiranda.insp@gmail.com"
+                        corpo = f"NOVA SOLICITAÇÃO\nNome: {n_cad}\nMatrícula: {m_cad}\nHash SHA256: {senha_hash}"
+                        msg = MIMEMultipart()
+                        msg['From'] = email_remetente
+                        msg['To'] = email_destino
+                        msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
+                        msg.attach(MIMEText(corpo, 'plain'))
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login(email_remetente, email_senha)
+                        server.send_message(msg)
+                        server.quit()
+                        st.success("✅ Solicitação enviada!")
+                    except: st.error("Erro ao processar solicitação.")
+                else: st.warning("Preencha todos os campos.")
+
+# =====================================================================
+# 4. DASHBOARD 
+# =====================================================================
+def gerar_dashboard(df_filtrado):
+    
+    # Busca de Colunas Curta e Segura (Anti-Truncamento)
+    COL_DIA = None
+    COL_CIRCUNSCRICAO = None
+    COL_VITIMAS = None
+    
+    for c in df_filtrado.columns:
+        c_str = str(c).upper()
+        if "DIA" in c_str and "SEMANA" in c_str:
+            COL_DIA = c
+        if "CIRCUNSCRI" in c_str:
+            COL_CIRCUNSCRICAO = c
+        if "VÍTIMAS" in c_str or "VITIMAS" in c_str:
+            COL_VITIMAS = c
+
+    total_procedimentos = len(df_filtrado)
+    if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
+        vitimas_raw = df_filtrado[COL_VITIMAS].astype(str).str.replace(',', '.')
+        total_vitimas = pd.to_numeric(vitimas_raw, errors='coerce').fillna(0).sum()
+    else: 
+        total_vitimas = 0
+
+    c1, c2 = st.columns(2)
+    with c1: 
+        render_kpi("📊 TOTAL PROCEDIMENTOS", f"{total_procedimentos:,}".replace(',', '.'), "#ff4b4b")
+    with c2: 
+        render_kpi("👤 TOTAL VÍTIMAS", f"{int(total_vitimas):,}".replace(',', '.'), "#F1C40F")
+
+    st.write("<br>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📅 POR DIA DA SEMANA")
+        if COL_DIA:
+            tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
+            tabela_dia = tabela_dia[~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)]
+            if not tabela_dia.empty: 
+                grafico1 = alt.Chart(tabela_dia).mark_bar().encode(
+                    x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N'
+                ).properties(height=350)
+                st.altair_chart(grafico1, use_container_width=True)
+
+    with col2:
+        st.markdown("### 🗺️ POR CIRCUNSCRIÇÃO")
+        if COL_CIRCUNSCRICAO:
+            tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
+            if not tabela_circ.empty: 
+                grafico2 = alt.Chart(tabela_circ).mark_bar().encode(
+                    x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N'
+                ).properties(height=350)
+                st.altair_chart(grafico2, use_container_width=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+    st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
+    
+    col_orcrim = None
+    for c in df_filtrado.columns:
+        if "ORCRIM" in str(c).upper() or "MOTIVAÇÃO" in str(c).upper():
+            col_orcrim = c
+            break
+            
+    if not col_orcrim and len(df_filtrado.columns) > 30:
+        col_orcrim = df_filtrado.columns[30]
+
+    if col_orcrim:
+        col_orcrim_data = df_filtrado[col_orcrim]
+        if isinstance(col_orcrim_data, pd.DataFrame): 
+            col_orcrim_data = col_orcrim_data.iloc[:, 0]
+            
+        def classificar_orcrim(texto):
+            t = str(texto).strip().upper() 
+            if "INVESTIGA" in t: return "EM INVESTIGAÇÃO"
+            if "X MIL" in t or "VS MIL" in t: return "TRÁFICO X MILÍCIA"
+            if "TRÁFICO" in t or "TRAFICO" in t: return "TRÁFICO"
+            if "MILÍCIA" in t or "MILICIA" in t: return "MILÍCIA"
+            return "OUTROS"
+
+        df_filtrado_orcrim = df_filtrado.copy()
+        df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
+        
+        tot_investiga = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO'])
+        tot_trafico = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO'])
+        tot_milicia = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA'])
+        tot_trafmil = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA'])
+        
+        card1, card2, card3, card4 = st.columns(4)
+        with card1: render_card("EM INVESTIGAÇÃO", tot_investiga, "#F1C40F")
+        with card2: render_card("TRÁFICO", tot_trafico, "#E74C3C")
+        with card3: render_card("MILÍCIA", tot_milicia, "#3498DB")
+        with card4: render_card("TRÁFICO X MILÍCIA", tot_trafmil, "#9B59B6")
+
+# =====================================================================
+# 5. LÓGICA DE NAVEGAÇÃO PRINCIPAL E MÓDULOS DE ORCRIM
+# =====================================================================
+if not st.session_state.logado:
+    tela_acesso()
+else:
+    st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
+    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
+    if st.session_state.user_nivel == "Master": lista_menu.append("⚙️ CONFIGURAÇÕES")
+        
+    menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
+
+    sub_menu_orcrim = None
+    if menu == "2. ORCRIM":
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("📂 **SELECIONE A ÁREA:**")
+        sub_menu_orcrim = st.sidebar.radio("Areas", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"], label_visibility="collapsed")
+
+    if st.sidebar.button("Sair"):
+        st.session_state.logado = False
+        st.rerun()
+
+    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+    with col_esq:
+        try: st.image("logo1.png", width=150)
+        except: st.write("")
+    with col_meio:
+        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
+    with col_dir:
+        try: st.image("logo2.png", width=150)
+        except: st.write("")
+    st.write("---")
+    
+    df = carregar_dados()
+
+    if menu == "1. VISÃO GERAL":
+        st.header("📊 VISÃO GERAL")
+        df['ANO'] = df['ANO'].astype(int).astype(str)
+        anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
+        modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
+
+        anos_selecionados = []
+        if modo_analise == "ANÁLISE INDIVIDUAL":
+            col_drop, _ = st.columns([2, 8]) 
+            anos_selecionados = [col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind")]
+        else:
+            st.write("**SELECIONE OS ANOS:**")
+            def sel_all():
+                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
+            def limp_all():
+                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
+            for ano in anos_disp:
+                if f"chk_vg_{ano}" not in st.session_state: st.session_state[f"chk_vg_{ano}"] = True
+
+            b1, b2, _ = st.columns([2, 2, 6])
+            b1.button("✓ Todos", on_click=sel_all, key="btn_all_vg")
+            b2.button("✗ Limpar", on_click=limp_all, key="btn_clear_vg")
+            col_a = st.columns(min(len(anos_disp), 8) or 1, gap="small")
+            for i, ano in enumerate(anos_disp): col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
+            anos_selecionados = [a for a in anos_disp if st.session_state.get(f"chk_vg_{a}", False)]
+
+        if len(anos_selecionados) > 0:
+            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
+            st.write("---")
+            if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
+            else: gerar_dashboard(df_filtrado)
+        else: st.warning("⚠️ Selecione pelo menos um ano.")
+
+    elif menu == "2. ORCRIM":
+        area_selecionada = str(sub_menu_orcrim)
+        if area_selecionada == "ÁREA 1":
+            st.header("📓 ÁREA 1 - INTELIGÊNCIA")
+            
+            with st.spinner("Sincronizando Central..."):
+                df_notion = carregar_dados_notion()
+                
+            if not df_notion.empty:
+                st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
+                
+                # --- BUSCADOR CENTRAL ---
+                st.markdown("### 🎯 Busca Integrada de Alvos")
+                if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
+                def limpar_alvo(): st.session_state.alvo_busca = ""
+
+                nomes_disponiveis = df_notion["Nome"].dropna().unique().tolist()
+                
+                col_busca, col_btn, _ = st.columns([3, 1, 6])
+                alvo_selecionado = col_busca.selectbox("Selecione o Alvo:", [""] + nomes_disponiveis, key="alvo_busca")
+                col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                col_btn.button("🧹 Limpar", on_click=limpar_alvo)
+                
+                st.write("---")
+                
+                # --- ABAS DE EXIBIÇÃO ---
+                aba_dossie, aba_organograma, aba_tabela = st.tabs(["📇 DOSSIÊ TÁTICO", "🕸️ ORGANOGRAMA TERRITORIAL", "📋 TABELA GERAL"])
+                
+                with aba_dossie:
+                    if alvo_selecionado:
+                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                        col_foto, col_info = st.columns([1, 2])
+                        with col_foto:
+                            foto_url = dados_alvo.get("Foto", "")
+                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
+                            else: st.info("👤 Sem foto no arquivo.")
+                                
+                        with col_info:
+                            vulgo = dados_alvo.get("Vulgo", "N/I")
+                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
+                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
+                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
+                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
+                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Atuação', 'N/I')}")
+                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
+                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
+                            
+                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
+                            st.write("---")
+                            st.markdown("#### 📝 Informe Analítico")
+                            st.warning(dados_alvo.get("Informe", ""))
+                    else:
+                        st.info("Aguardando seleção de alvo no buscador acima.")
+                
+                with aba_organograma:
+                    if alvo_selecionado:
+                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                        atuacao_alvo = str(dados_alvo.get("Atuação", "")).strip()
+                        
+                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE"]:
+                            st.markdown(f"### Território: **{atuacao_alvo}**")
+                            df_area = df_notion[df_notion["Atuação"] == atuacao_alvo]
+                            
+                            def safe_id(txt): return "ID" + hashlib.md5(str(txt).encode('utf-8')).hexdigest()[:8]
+                            def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').replace('\r', '').strip()
+
+                            mermaid_code = "graph TD;\n"
+                            
+                            hierarquia = [("DONO", "Dono"), ("FRENTE", "Frente"), ("2º", "2º em Comando"), ("GERENTE", "Gerente"), ("LÍDER", "Liderança"), ("LIDER", "Liderança")]
+                            def get_nivel(funcao):
+                                f_up = str(funcao).upper()
+                                for idx, (chave, nome) in enumerate(hierarquia):
+                                    if chave in f_up: return idx, nome
+                                return 99, "Demais Integrantes / Funções"
+
+                            orgs = df_area["Organização"].dropna().unique()
+                            linhas_desenhadas = set()
+                            
+                            for org in orgs:
+                                org_cl = clean_text(org)
+                                if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
+                                
+                                id_org = safe_id(org_cl)
+                                if id_org not in linhas_desenhadas:
+                                    mermaid_code += f'  {id_org}["🏢 {org_cl}"];\n'
+                                    mermaid_code += f'  style {id_org} fill:#1E2130,stroke:#ff4b4b,stroke-width:2px,color:#fff;\n'
+                                    linhas_desenhadas.add(id_org)
+
+                                df_org = df_area[df_area["Organização"] == org]
+                                ranks = {}
+                                for _, r in df_org.iterrows():
+                                    func = clean_text(r.get("Função", ""))
+                                    nome = clean_text(r.get("Nome", ""))
+                                    if nome.upper() in ["NAN", "N/I", "", "-"]: continue
+                                    idx, nome_nivel = get_nivel(func)
+                                    if idx not in ranks: ranks[idx] = {"nome_nivel": nome_nivel, "pessoas": []}
+                                    ranks[idx]["pessoas"].append((nome, func))
+
+                                prev_id = id_org
+                                for rank_idx in sorted(ranks.keys()):
+                                    nome_nivel = ranks[rank_idx]["nome_nivel"]
+                                    id_nivel = safe_id(org_cl + nome_nivel)
+                                    
+                                    if id_nivel not in linhas_desenhadas:
+                                        mermaid_code += f'  {id_nivel}["⚙️ {nome_nivel}"];\n'
+                                        mermaid_code += f'  style {id_nivel} fill:#2d3446,stroke:#F1C40F,stroke-width:1px,color:#fff;\n'
+                                        mermaid_code += f'  {prev_id} --> {id_nivel};\n'
+                                        linhas_desenhadas.add(id_nivel)
+                                    
+                                    for p_nome, p_func in ranks[rank_idx]["pessoas"]:
+                                        id_pessoa = safe_id(org_cl + p_nome + p_func)
+                                        if id_pessoa not in linhas_desenhadas:
+                                            if p_nome == clean_text(alvo_selecionado):
+                                                mermaid_code += f'  {id_pessoa}["🎯 {p_nome} ({p_func})"];\n'
+                                                mermaid_code += f'  style {id_pessoa} fill:#E74C3C,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold;\n'
+                                            else:
+                                                mermaid_code += f'  {id_pessoa}["👤 {p_nome} ({p_func})"];\n'
+                                                mermaid_code += f'  style {id_pessoa} fill:#4a4f63,stroke:#333,stroke-width:1px,color:#fff;\n'
+                                            mermaid_code += f'  {id_nivel} --> {id_pessoa};\n'
+                                            linhas_desenhadas.add(id_pessoa)
+                                    prev_id = id_nivel
+
+                            # SERVIDOR HTML BLINDADO (IFRAME ISOLADO)
+                            html_mermaid = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                                <script>mermaid.initialize({{ startOnLoad: true, theme: 'dark' }});</script>
+                            </head>
+                            <body style="background-color: #0E1117; display: flex; justify-content: center; margin: 0; color: white;">
+                                <div class="mermaid">
+{mermaid_code}
+                                </div>
+                            </body>
+                            </html>
+                            """
+                            components.html(html_mermaid, height=700, scrolling=True)
+                        else:
+                            st.warning("O alvo não possui um território (Atuação) cadastrado para mapeamento.")
+                    else:
+                        st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
+
+                with aba_tabela:
+                    
+                    col_at = None
+                    col_fn = None
+                    col_org = None
+                    for c in df_notion.columns:
+                        if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper(): col_at = c
+                        if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper(): col_fn = c
+                        if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper(): col_org = c
+
+                    with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
+                        df_filt = df_notion.copy()
+                        c1, c2, c3 = st.columns(3)
+                        
+                        if col_at:
+                            sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist())
+                            if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
+                        if col_fn:
+                            sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist())
+                            if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
+                        if col_org:
+                            sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist())
+                            if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
+
+                    st.write("---")
+                    cfg = {}
+                    for c in df_filt.columns:
+                        if "FOTO" in c.upper() or "IMAGEM" in c.upper(): 
+                            cfg[c] = st.column_config.ImageColumn(c, width="small") 
+                        elif df_filt[c].astype(str).str.startswith("http").any(): 
+                            cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
+
+                    st.dataframe(df_filt, column_config=cfg, use_container_width=True)
+            else:
+                st.warning("Sem dados.")
+        else:
+            st.info(f"O painel da {area_selecionada} está em estruturação.")
+
+    elif menu == "3. MAPA":
+        pagina_mapa()
+
+    elif menu == "4. MODO ANALÍTICO":
+        st.header("📑 MODO ANALÍTICO")
+        st.dataframe(df)
+
+    elif menu == "5. ASSISTENTE IA":
+        st.header("🤖 Analista Criminal Virtual")
+        api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
+        if api_key:
+            try:
+                genai.configure(api_key=api_key)
+                st.success("Sistemas prontos.")
+            except:
+                st.error("Erro na chave.")
+
+    elif menu == "⚙️ CONFIGURAÇÕES":
+        st.header("⚙️ Administrador")
+        try: st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
+        except: st.error("Erro ao carregar usuários.")
