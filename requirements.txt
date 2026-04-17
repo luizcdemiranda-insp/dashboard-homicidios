@@ -1,9 +1,10 @@
 streamlit
 pandas
 altair
-google-generativeai>=0.8.0
+google-generativeai
 st-gsheets-connection
+requests
 folium
 streamlit-folium
-
+geopy
 
