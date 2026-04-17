@@ -497,8 +497,24 @@ else:
                         st.info("💡 Dica: Para os filtros aparecerem, certifique-se de que as colunas na sua tabela do Notion se chamem 'Atuação', 'Função' ou 'Organização'.")
 
                 st.write("---")
-                # Mostra a tabela já com os filtros aplicados
-                st.dataframe(df_filtrado_notion, use_container_width=True)
+                
+                # ==========================================
+                # 🖼️ MOTOR DE RENDERIZAÇÃO DE IMAGENS E LINKS
+                # ==========================================
+                config_colunas = {}
+                for col in df_filtrado_notion.columns:
+                    # Se o nome da coluna tiver "FOTO" ou "IMAGEM", o Streamlit desenha a foto
+                    if "FOTO" in col.upper() or "IMAGEM" in col.upper():
+                        config_colunas[col] = st.column_config.ImageColumn(col, width="large")
+                    # Se for outro tipo de link (como um PDF), vira um botão clicável
+                    elif df_filtrado_notion[col].astype(str).str.startswith("http").any():
+                        config_colunas[col] = st.column_config.LinkColumn(col, display_text="🔗 Acessar")
+
+                # Mostra a tabela aplicando a transformação das fotos
+                st.dataframe(df_filtrado_notion, column_config=config_colunas, use_container_width=True)
+                
+            else:
+                st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
                 
             else:
                 st.warning("Verifique a conexão ou se a tabela da ÁREA 1 possui dados.")
