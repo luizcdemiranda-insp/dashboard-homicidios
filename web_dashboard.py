@@ -11,6 +11,7 @@ import requests
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
+import re
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -50,6 +51,9 @@ st.markdown("""
 def gerar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
+def limpar_id_mermaid(texto):
+    return re.sub(r'\W+', '', str(texto))
+
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "user_nivel" not in st.session_state:
@@ -60,7 +64,7 @@ if "user_nome" not in st.session_state:
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # =====================================================================
-# 1.5 FUNÇÕES DE RENDERIZAÇÃO BLINDADAS (Anti-Quebra de Linha)
+# 1.5 FUNÇÕES DE RENDERIZAÇÃO BLINDADAS
 # =====================================================================
 def render_kpi(titulo, valor, cor):
     s_div = "background-color:#1E2130; padding:25px; border-radius:12px; "
@@ -96,27 +100,22 @@ def carregar_dados_notion():
     try:
         token = st.secrets["notion"]["token"]
         database_id = st.secrets["notion"]["database_id"]
-        
         url = f"https://api.notion.com/v1/databases/{database_id}/query"
         headers = {
             "Authorization": f"Bearer {token}",
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
         }
-        
         response = requests.post(url, headers=headers)
-        if response.status_code != 200:
-            return pd.DataFrame()
+        if response.status_code != 200: return pd.DataFrame()
             
         dados_brutos = response.json().get("results", [])
         linhas = []
-        
         for item in dados_brutos:
             props = item.get("properties", {})
             linha = {}
             for nome_coluna, dados_coluna in props.items():
                 tipo = dados_coluna.get("type")
-                
                 if tipo == "title":
                     vals = dados_coluna.get("title", [])
                     linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
@@ -152,61 +151,46 @@ def carregar_dados_notion():
                     if arquivos:
                         arq = arquivos[0]
                         linha[nome_coluna] = arq.get("file", {}).get("url") or arq.get("external", {}).get("url") or arq.get("name", "")
-                    else:
-                        linha[nome_coluna] = ""
-                else:
-                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                    else: linha[nome_coluna] = ""
+                else: linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
             linhas.append(linha)
         return pd.DataFrame(linhas)
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOPROCESSAMENTO E MAPA (AGRUPADOR TÁTICO E BALÕES INTELIGENTES)
+# 2.6 GEOPROCESSAMENTO E MAPA 
 # =====================================================================
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
-    
     df = carregar_dados()
-    
     col_lat = next((c for c in df.columns if "LAT" in c.upper()), None)
     col_lon = next((c for c in df.columns if "LON" in c.upper()), None)
 
     if col_lat and col_lon:
         df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
         df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
-        
         df_mapa = df.copy()
         df_mapa[col_lat] = df_lat_limpa
         df_mapa[col_lon] = df_lon_limpa
         df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
-        
         st.success(f"✅ {len(df_mapa)} pontos localizados via coordenadas da planilha.")
 
         m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
-
         folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
         folium.TileLayer(
             tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Satélite Híbrido'
+            attr='Google', name='Satélite Híbrido'
         ).add_to(m)
-
         Draw(export=False, position='topleft').add_to(m)
 
-        # Mapeamento Inteligente de Colunas para o Balão
         col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
         col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
         col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
         col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
         col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
 
-        # Inicializa o Agrupador de Marcadores (MarkerCluster)
         mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
-
         for _, row in df_mapa.iterrows():
-            
-            # Construção do Balão Formato Tático em HTML
             html_popup = f"""
             <div style='min-width: 220px; font-family: sans-serif;'>
                 <h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4>
@@ -217,7 +201,6 @@ def pagina_mapa():
                 <b>Local:</b> {row.get(col_local, 'N/I')}
             </div>
             """
-            
             folium.Marker(
                 location=[row[col_lat], row[col_lon]],
                 popup=folium.Popup(html_popup, max_width=350),
@@ -226,8 +209,7 @@ def pagina_mapa():
 
         folium.LayerControl().add_to(m)
         st_folium(m, width=1200, height=600, returned_objects=[])
-    else:
-        st.error("⚠️ Colunas de Latitude/Longitude não encontradas na planilha.")
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
 
 # =====================================================================
 # 3. INTERFACE DE ACESSO
@@ -241,37 +223,28 @@ def tela_acesso():
         with aba_login:
             mat_login = st.text_input("Matrícula", key="login_mat_input")
             senha_login = st.text_input("Senha", type="password", key="login_pass_input")
-            
             if st.button("Acessar Painel"):
                 try:
                     url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
                     df_users = pd.read_csv(url_users)
                     df_users.columns = [str(col).strip().upper() for col in df_users.columns]
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
-                    mat_login_limpa = str(mat_login).strip()
                     senha_hash = gerar_hash(senha_login)
-                    
-                    user_match = df_users[(df_users['MATRICULA'] == mat_login_limpa) & (df_users['SENHA'] == senha_hash)]
+                    user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
                     if not user_match.empty:
-                        status = str(user_match.iloc[0]['STATUS']).strip().upper()
-                        if status == 'APROVADO':
+                        if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
                             st.session_state.logado = True
                             st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
                             st.session_state.user_nome = user_match.iloc[0]['NOME']
                             st.rerun()
-                        else:
-                            st.warning(f"Acesso Pendente. Status atual: {status}")
-                    else:
-                        st.error("Matrícula ou Senha incorretos.")
-                except Exception as e:
-                    st.error("Erro na base de usuários.")
+                        else: st.warning("Acesso Pendente.")
+                    else: st.error("Matrícula ou Senha incorretos.")
+                except: st.error("Erro na base de usuários.")
 
         with aba_cadastro:
-            st.markdown("### 📝 Solicitação de Acesso")
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
             m_cad = st.text_input("Matrícula", key="cad_mat_input")
             s_cad = st.text_input("Defina uma Senha", type="password", key="cad_pass_input")
-            
             if st.button("Enviar Solicitação"):
                 if n_cad and m_cad and s_cad:
                     try:
@@ -279,24 +252,20 @@ def tela_acesso():
                         email_remetente = st.secrets["email"]["remetente"]
                         email_senha = st.secrets["email"]["senha"]
                         email_destino = "luizcdemiranda.insp@gmail.com"
-
                         corpo = f"NOVA SOLICITAÇÃO\nNome: {n_cad}\nMatrícula: {m_cad}\nHash SHA256: {senha_hash}"
                         msg = MIMEMultipart()
                         msg['From'] = email_remetente
                         msg['To'] = email_destino
                         msg['Subject'] = f"🔔 Solicitação de Cadastro: {n_cad}"
                         msg.attach(MIMEText(corpo, 'plain'))
-
                         server = smtplib.SMTP('smtp.gmail.com', 587)
                         server.starttls()
                         server.login(email_remetente, email_senha)
                         server.send_message(msg)
                         server.quit()
                         st.success("✅ Solicitação enviada!")
-                    except Exception as e:
-                        st.error(f"Erro ao processar solicitação: {e}")
-                else:
-                    st.warning("Preencha todos os campos.")
+                    except: st.error("Erro ao processar solicitação.")
+                else: st.warning("Preencha todos os campos.")
 
 # =====================================================================
 # 4. DASHBOARD 
@@ -307,18 +276,13 @@ def gerar_dashboard(df_filtrado):
     COL_VITIMAS = next((c for c in df_filtrado.columns if "VÍTIMAS" in str(c) or "VITIMAS" in str(c)), None)
 
     total_procedimentos = len(df_filtrado)
-    
     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
-        vitimas_raw = df_filtrado[COL_VITIMAS]
-        total_vitimas = pd.to_numeric(vitimas_raw.astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
-    else: 
-        total_vitimas = 0
+        total_vitimas = pd.to_numeric(df_filtrado[COL_VITIMAS].astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
+    else: total_vitimas = 0
 
     c1, c2 = st.columns(2)
-    with c1: 
-        render_kpi("📊 TOTAL PROCEDIMENTOS", f"{total_procedimentos:,}".replace(',', '.'), "#ff4b4b")
-    with c2: 
-        render_kpi("👤 TOTAL VÍTIMAS", f"{int(total_vitimas):,}".replace(',', '.'), "#F1C40F")
+    with c1: render_kpi("📊 TOTAL PROCEDIMENTOS", f"{total_procedimentos:,}".replace(',', '.'), "#ff4b4b")
+    with c2: render_kpi("👤 TOTAL VÍTIMAS", f"{int(total_vitimas):,}".replace(',', '.'), "#F1C40F")
 
     st.write("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -327,55 +291,40 @@ def gerar_dashboard(df_filtrado):
         st.markdown("### 📅 POR DIA DA SEMANA")
         if COL_DIA:
             tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
-            filtro = ~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)
-            tabela_dia = tabela_dia[filtro]
+            tabela_dia = tabela_dia[~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)]
             if not tabela_dia.empty:
-                grafico_dia = alt.Chart(tabela_dia).mark_bar().encode(
-                    x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N'
-                ).properties(height=350)
-                st.altair_chart(grafico_dia, use_container_width=True)
+                st.altair_chart(alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
 
     with col2:
         st.markdown("### 🗺️ POR CIRCUNSCRIÇÃO")
         if COL_CIRCUNSCRICAO:
             tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
             if not tabela_circ.empty:
-                grafico_circ = alt.Chart(tabela_circ).mark_bar().encode(
-                    x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N'
-                ).properties(height=350)
-                st.altair_chart(grafico_circ, use_container_width=True)
+                st.altair_chart(alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
 
     st.write("<br>", unsafe_allow_html=True)
     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
-    
     sugestoes_orcrim = [c for c in df_filtrado.columns if "ORCRIM" in str(c) or "MOTIVAÇÃO" in str(c)]
     col_orcrim = sugestoes_orcrim[0] if sugestoes_orcrim else (df_filtrado.columns[30] if len(df_filtrado.columns) > 30 else None)
 
     if col_orcrim:
-        col_orcrim_data = df_filtrado[col_orcrim]
-        if isinstance(col_orcrim_data, pd.DataFrame): col_orcrim_data = col_orcrim_data.iloc[:, 0]
-        
+        col_orcrim_data = df_filtrado[col_orcrim].iloc[:, 0] if isinstance(df_filtrado[col_orcrim], pd.DataFrame) else df_filtrado[col_orcrim]
         def classificar_orcrim(texto):
-            texto = str(texto).strip().upper() 
-            if "INVESTIGA" in texto: return "EM INVESTIGAÇÃO"
-            if "X MIL" in texto or "VS MIL" in texto: return "TRÁFICO X MILÍCIA"
-            if "TRÁFICO" in texto or "TRAFICO" in texto: return "TRÁFICO"
-            if "MILÍCIA" in texto or "MILICIA" in texto: return "MILÍCIA"
+            t = str(texto).strip().upper() 
+            if "INVESTIGA" in t: return "EM INVESTIGAÇÃO"
+            if "X MIL" in t or "VS MIL" in t: return "TRÁFICO X MILÍCIA"
+            if "TRÁFICO" in t or "TRAFICO" in t: return "TRÁFICO"
+            if "MILÍCIA" in t or "MILICIA" in t: return "MILÍCIA"
             return "OUTROS"
 
         df_filtrado_orcrim = df_filtrado.copy()
         df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
         
-        tot_investiga = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO'])
-        tot_trafico = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO'])
-        tot_milicia = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA'])
-        tot_traf_mil = len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA'])
-
         card1, card2, card3, card4 = st.columns(4)
-        with card1: render_card("EM INVESTIGAÇÃO", tot_investiga, "#F1C40F")
-        with card2: render_card("TRÁFICO", tot_trafico, "#E74C3C")
-        with card3: render_card("MILÍCIA", tot_milicia, "#3498DB")
-        with card4: render_card("TRÁFICO X MILÍCIA", tot_traf_mil, "#9B59B6")
+        with card1: render_card("EM INVESTIGAÇÃO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO']), "#F1C40F")
+        with card2: render_card("TRÁFICO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO']), "#E74C3C")
+        with card3: render_card("MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA']), "#3498DB")
+        with card4: render_card("TRÁFICO X MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA']), "#9B59B6")
 
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO PRINCIPAL
@@ -416,8 +365,6 @@ else:
         st.header("📊 VISÃO GERAL")
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        
-        st.subheader("FILTROS DE ANÁLISE")
         modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
 
         anos_selecionados = []
@@ -436,11 +383,9 @@ else:
             b1, b2, _ = st.columns([2, 2, 6])
             b1.button("✓ Todos", on_click=sel_all, key="btn_all_vg")
             b2.button("✗ Limpar", on_click=limp_all, key="btn_clear_vg")
-            
             col_a = st.columns(min(len(anos_disp), 8) or 1, gap="small")
             for i, ano in enumerate(anos_disp):
                 col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
-            
             anos_selecionados = [a for a in anos_disp if st.session_state.get(f"chk_vg_{a}", False)]
 
         if len(anos_selecionados) > 0:
@@ -448,47 +393,120 @@ else:
             st.write("---")
             if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
             else: gerar_dashboard(df_filtrado)
-        else:
-            st.warning("⚠️ Selecione pelo menos um ano.")
+        else: st.warning("⚠️ Selecione pelo menos um ano.")
 
     elif menu == "2. ORCRIM":
         area_selecionada = str(sub_menu_orcrim)
         if area_selecionada == "ÁREA 1":
-            st.header("📓 ÁREA 1")
-            with st.spinner("Sincronizando..."):
+            st.header("📓 ÁREA 1 - INTELIGÊNCIA")
+            
+            with st.spinner("Sincronizando Dossiês..."):
                 df_notion = carregar_dados_notion()
+                
             if not df_notion.empty:
-                st.success(f"✅ {len(df_notion)} registros encontrados.")
-                ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Atuação", "Organização", "Função", "Situação", "Rede social", "Informe"] 
-                c_ex = [c for c in ordem_ideal if c in df_notion.columns]
-                c_extra = [c for c in df_notion.columns if c not in c_ex]
-                df_notion = df_notion[c_ex + c_extra]
-
-                with st.expander("🔍 FILTROS", expanded=True):
-                    col_at = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
-                    col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
-                    col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
+                st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
+                
+                # ========================================================
+                # NOVO SISTEMA DE ABAS (DOSSIÊ / ORGANOGRAMA / TABELA)
+                # ========================================================
+                aba_dossie, aba_organograma, aba_tabela = st.tabs(["📇 DOSSIÊ TÁTICO", "🕸️ ORGANOGRAMA", "📋 TABELA DE DADOS"])
+                
+                with aba_dossie:
+                    st.markdown("### 🎯 Busca de Alvo")
+                    nomes_disponiveis = df_notion["Nome"].dropna().unique().tolist()
+                    alvo_selecionado = st.selectbox("Selecione o Alvo para puxar a Ficha Criminal:", [""] + nomes_disponiveis)
                     
-                    df_filt = df_notion.copy()
-                    c1, c2, c3 = st.columns(3)
+                    if alvo_selecionado:
+                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                        st.write("---")
+                        
+                        col_foto, col_info = st.columns([1, 2])
+                        with col_foto:
+                            foto_url = dados_alvo.get("Foto", "")
+                            if str(foto_url).startswith("http"):
+                                st.image(foto_url, use_container_width=True)
+                            else:
+                                st.info("👤 Foto não anexada no banco central.")
+                                
+                        with col_info:
+                            vulgo = dados_alvo.get("Vulgo", "N/I")
+                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
+                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
+                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
+                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
+                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Atuação', 'N/I')}")
+                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
+                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
+                            
+                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
+                            st.write("---")
+                            st.markdown("#### 📝 Relatório de Inteligência (Informe)")
+                            st.warning(dados_alvo.get("Informe", ""))
+                
+                with aba_organograma:
+                    st.markdown("### 🕸️ Estrutura Hierárquica (Teia de Vínculos)")
+                    st.write("Organograma gerado automaticamente com base na Organização e Função de cada alvo cadastrado.")
                     
-                    if col_at:
-                        sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist())
-                        if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
-                    if col_fn:
-                        sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist())
-                        if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
-                    if col_org:
-                        sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist())
-                        if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
+                    mermaid_code = "graph TD;\n"
+                    linhas_adicionadas = set()
+                    
+                    for _, row in df_notion.iterrows():
+                        org = str(row.get("Organização", "N/I")).strip()
+                        func = str(row.get("Função", "N/I")).strip()
+                        nome = str(row.get("Nome", "N/I")).strip()
+                        
+                        if org != "nan" and org != "N/I" and org != "":
+                            id_org = limpar_id_mermaid(org) + "_org"
+                            id_func = limpar_id_mermaid(func) + f"_{id_org}"
+                            id_nome = limpar_id_mermaid(nome) + f"_{id_func}"
+                            
+                            # Conexão: Organização -> Função
+                            linha1 = f'  {id_org}["🏢 {org}"] --> {id_func}["⚙️ {func}"];\n'
+                            if linha1 not in linhas_adicionadas:
+                                mermaid_code += linha1
+                                linhas_adicionadas.add(linha1)
+                                
+                            # Conexão: Função -> Nome do Alvo
+                            if nome != "nan" and nome != "N/I" and nome != "":
+                                linha2 = f'  {id_func} --> {id_nome}["👤 {nome}"];\n'
+                                if linha2 not in linhas_adicionadas:
+                                    mermaid_code += linha2
+                                    linhas_adicionadas.add(linha2)
+                    
+                    # Renderiza o gráfico Mermaid de forma nativa no Streamlit
+                    st.markdown(f"```mermaid\n{mermaid_code}\n```")
 
-                st.write("---")
-                cfg = {}
-                for c in df_filt.columns:
-                    if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
-                    elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
+                with aba_tabela:
+                    ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Atuação", "Organização", "Função", "Situação", "Rede social", "Informe"] 
+                    c_ex = [c for c in ordem_ideal if c in df_notion.columns]
+                    c_extra = [c for c in df_notion.columns if c not in c_ex]
+                    df_notion = df_notion[c_ex + c_extra]
 
-                st.dataframe(df_filt, column_config=cfg, use_container_width=True)
+                    with st.expander("🔍 FILTROS GERAIS", expanded=True):
+                        col_at = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
+                        col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
+                        col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
+                        
+                        df_filt = df_notion.copy()
+                        c1, c2, c3 = st.columns(3)
+                        
+                        if col_at:
+                            sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist())
+                            if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
+                        if col_fn:
+                            sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist())
+                            if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
+                        if col_org:
+                            sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist())
+                            if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
+
+                    st.write("---")
+                    cfg = {}
+                    for c in df_filt.columns:
+                        if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
+                        elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
+
+                    st.dataframe(df_filt, column_config=cfg, use_container_width=True)
             else:
                 st.warning("Sem dados.")
         else:
