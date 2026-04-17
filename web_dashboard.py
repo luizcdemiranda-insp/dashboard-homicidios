@@ -575,7 +575,7 @@ else:
             st.write("Aguardando integração das tabelas correspondentes.")
             
     elif menu == "3. MAPA":
-    pagina_mapa()
+        pagina_mapa()
     
     elif menu == "4. MODO ANALÍTICO":
         st.header("📑 MODO ANALÍTICO")
