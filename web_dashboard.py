@@ -466,7 +466,6 @@ else:
                     "Vulgo",
                     "RG",
                     "Foto",
-                    "Comunidades",
                     "Atuação",
                     "Organização",
                     "Função",
