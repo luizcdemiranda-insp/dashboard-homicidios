@@ -97,10 +97,28 @@ def carregar_dados_notion():
         database_id = st.secrets["notion"]["database_id"]
         url = f"https://api.notion.com/v1/databases/{database_id}/query"
         headers = {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28", "Content-Type": "application/json"}
-        response = requests.post(url, headers=headers)
-        if response.status_code != 200: return pd.DataFrame()
+        
+        dados_brutos = []
+        tem_mais = True
+        cursor = None
+        
+        # Loop de Paginação: Varre o banco de dados rompendo o limite de 100
+        while tem_mais:
+            payload = {}
+            if cursor:
+                payload["start_cursor"] = cursor
+                
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code != 200: 
+                break
+                
+            json_data = response.json()
+            dados_brutos.extend(json_data.get("results", []))
             
-        dados_brutos = response.json().get("results", [])
+            # Checa se o Notion tem mais páginas a fornecer
+            tem_mais = json_data.get("has_more", False)
+            cursor = json_data.get("next_cursor", None)
+            
         linhas = []
         for item in dados_brutos:
             props = item.get("properties", {})
