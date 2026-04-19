@@ -503,10 +503,12 @@ else:
                                 for _, r in df_org.iterrows():
                                     func = clean_text(r.get("Função", ""))
                                     nome = clean_text(r.get("Nome", ""))
+                                    foto = r.get("Foto", "") # 📸 Captura o link da foto do banco de dados
+                                    
                                     if nome.upper() in ["NAN", "N/I", "", "-"]: continue
                                     idx, nome_nivel = get_nivel(func)
                                     if idx not in ranks: ranks[idx] = []
-                                    ranks[idx].append((nome, func))
+                                    ranks[idx].append((nome, func, foto)) # Adiciona a foto na memória do pelotão
 
                                 for rank_idx in sorted(ranks.keys()):
                                     nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
@@ -519,7 +521,8 @@ else:
                                     # Container Flexbox para os Integrantes do Nível
                                     html_organograma += "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:10px;'>"
                                     
-                                    for p_nome, p_func in ranks[rank_idx]:
+                                    # Desempacota agora os 3 elementos: Nome, Função e Foto
+                                    for p_nome, p_func, p_foto in ranks[rank_idx]:
                                         if p_nome == clean_text(alvo_selecionado):
                                             bg_color = "#E74C3C"
                                             b_color = "#ffffff"
@@ -527,10 +530,17 @@ else:
                                             bg_color = "#4a4f63"
                                             b_color = "#333333"
                                             
+                                        # 📸 Renderização Condicional da Foto (Estilo Crachá)
+                                        img_html = ""
+                                        if str(p_foto).startswith("http"):
+                                            # Foto redonda, tamanho reduzido, com sombra e borda combinando com o cartão
+                                            img_html = f"<img src='{p_foto}' style='width:50px; height:50px; border-radius:50%; object-fit:cover; margin-bottom:8px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
+                                            
                                         # Cartão de Integrante Individual
                                         card_html = f"<div style='background-color:{bg_color}; border:2px solid {b_color}; "
                                         card_html += f"border-radius:8px; padding:10px; min-width:160px; max-width:220px; "
-                                        card_html += f"flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>"
+                                        card_html += f"flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: center;'>"
+                                        card_html += img_html # Injela a foto logo acima do nome
                                         card_html += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
                                         card_html += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
                                         card_html += "</div>"
@@ -538,7 +548,6 @@ else:
                                         html_organograma += card_html
                                         
                                     html_organograma += "</div>" # Fecha Flexbox
-                                html_organograma += "</div>" # Fecha Org
                                 
                             # Renderiza todo o motor visual nativamente
                             st.markdown(html_organograma, unsafe_allow_html=True)
