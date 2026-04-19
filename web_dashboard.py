@@ -390,36 +390,23 @@ else:
 
     if menu == "1. VISÃO GERAL":
         st.header("📊 VISÃO GERAL")
+        
+        # --- BLOCO DE DATA DE ATUALIZAÇÃO (COLUNA F) ---
+        try:
+            # Pega o valor da coluna F (índice 5) da última linha do CSV
+            data_atualizacao = df.iloc[-1, 5] 
+            st.markdown(f"""
+                <div style='color:#2ecc71; font-size:11px; font-style:italic; margin-top:-15px; margin-bottom:15px;'>
+                    Base atualizada em: {data_atualizacao}
+                </div>
+            """, unsafe_allow_html=True)
+        except Exception as e:
+            pass # Silencioso caso a coluna ou linha não exista
+        # ----------------------------------------------
+
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
         modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
-
-        anos_selecionados = []
-        if modo_analise == "ANÁLISE INDIVIDUAL":
-            col_drop, _ = st.columns([2, 8]) 
-            anos_selecionados = [col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind")]
-        else:
-            st.write("**SELECIONE OS ANOS:**")
-            def sel_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
-            def limp_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
-            for ano in anos_disp:
-                if f"chk_vg_{ano}" not in st.session_state: st.session_state[f"chk_vg_{ano}"] = True
-
-            b1, b2, _ = st.columns([2, 2, 6])
-            b1.button("✓ Todos", on_click=sel_all, key="btn_all_vg")
-            b2.button("✗ Limpar", on_click=limp_all, key="btn_clear_vg")
-            col_a = st.columns(min(len(anos_disp), 8) or 1, gap="small")
-            for i, ano in enumerate(anos_disp): col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
-            anos_selecionados = [a for a in anos_disp if st.session_state.get(f"chk_vg_{a}", False)]
-
-        if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
-            st.write("---")
-            if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
-            else: gerar_dashboard(df_filtrado)
-        else: st.warning("⚠️ Selecione pelo menos um ano.")
 
     elif menu == "2. ORCRIM":
         area_selecionada = str(sub_menu_orcrim)
