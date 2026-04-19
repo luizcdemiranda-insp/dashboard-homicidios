@@ -155,28 +155,23 @@ def tela_acesso():
             senha_login = st.text_input("Senha", type="password", key="login_pass_input")
             if st.button("Acessar Painel"):
                 try:
-                    url_users = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
-                    
-                    # Sistema de Reentrada Automática (Tenta 2 vezes antes de dar erro)
-                    df_users = None
-                    for i in range(2):
-                        try:
-                            df_users = pd.read_csv(url_users)
-                            break
-                        except:
-                            if i == 0: time.sleep(1.5)
-                            else: raise Exception("Falha de conexão")
-
+                    # Usando a conexão nativa blindada ao invés do pd.read_csv
+                    df_users = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", ttl=0)
                     df_users.columns = [str(col).strip().upper() for col in df_users.columns]
                     df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
+                    
                     senha_hash = gerar_hash(senha_login)
                     user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
+                    
                     if not user_match.empty:
                         if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
                             st.session_state.logado = True
                             st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
                             st.session_state.user_nome = user_match.iloc[0]['NOME']
                             st.rerun()
-                        else: st.warning("Acesso Pendente.")
-                    else: st.error("Matrícula ou Senha incorretos.")
-                except: st.error("Erro na base de usuários. Verifique a
+                        else: 
+                            st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
+                    else: 
+                        st.error("Matrícula ou Senha incorretos.")
+                except Exception as e: 
+                    st.error(f"Erro na base de usuários. Verifique a conexão. Detalhe: {e}")
