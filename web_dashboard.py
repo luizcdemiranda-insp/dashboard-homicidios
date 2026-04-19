@@ -498,31 +498,66 @@ else:
                                 html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'>"
                                 html_organograma += f"<h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
 
+                                # Injeta CSS tático para o Efeito Hover (Animação e Zoom)
+                                html_organograma += """
+                                <style>
+                                .tatico-card {
+                                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                                    position: relative;
+                                }
+                                .tatico-card:hover {
+                                    transform: scale(1.15);
+                                    z-index: 999;
+                                    box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important;
+                                }
+                                .tatico-card .info-oculta {
+                                    max-height: 0;
+                                    opacity: 0;
+                                    overflow: hidden;
+                                    transition: all 0.3s ease;
+                                }
+                                .tatico-card:hover .info-oculta {
+                                    max-height: 100px;
+                                    opacity: 1;
+                                    margin-top: 10px;
+                                    padding-top: 8px;
+                                    border-top: 1px dashed #7f8c8d;
+                                }
+                                .tatico-card img {
+                                    transition: all 0.3s ease;
+                                }
+                                .tatico-card:hover img {
+                                    width: 75px !important;
+                                    height: 75px !important;
+                                    border-radius: 8px !important; /* Perde o formato circular e revela a foto maior */
+                                    margin-bottom: 12px;
+                                }
+                                </style>
+                                """
+
                                 df_org = df_area[df_area["Organização"] == org]
                                 ranks = {}
                                 for _, r in df_org.iterrows():
                                     func = clean_text(r.get("Função", ""))
                                     nome = clean_text(r.get("Nome", ""))
-                                    foto = r.get("Foto", "") # 📸 Captura o link da foto do banco de dados
+                                    foto = r.get("Foto", "")
+                                    vulgo = clean_text(r.get("Vulgo", "N/I")) # Captura o Vulgo
+                                    rg = clean_text(r.get("RG", "N/I"))       # Captura o RG
                                     
                                     if nome.upper() in ["NAN", "N/I", "", "-"]: continue
                                     idx, nome_nivel = get_nivel(func)
                                     if idx not in ranks: ranks[idx] = []
-                                    ranks[idx].append((nome, func, foto)) # Adiciona a foto na memória do pelotão
+                                    # Adiciona todos os dados na memória do pelotão
+                                    ranks[idx].append((nome, func, foto, vulgo, rg)) 
 
                                 for rank_idx in sorted(ranks.keys()):
                                     nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
                                     
-                                    # Barra de Título do Nível Hierárquico
-                                    html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>"
-                                    html_organograma += f"{nome_nivel}"
-                                    html_organograma += "</div>"
+                                    html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div>"
                                     
-                                    # Container Flexbox para os Integrantes do Nível
-                                    html_organograma += "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:10px;'>"
+                                    html_organograma += "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
                                     
-                                    # Desempacota agora os 3 elementos: Nome, Função e Foto
-                                    for p_nome, p_func, p_foto in ranks[rank_idx]:
+                                    for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
                                         if p_nome == clean_text(alvo_selecionado):
                                             bg_color = "#E74C3C"
                                             b_color = "#ffffff"
@@ -530,20 +565,29 @@ else:
                                             bg_color = "#4a4f63"
                                             b_color = "#333333"
                                             
-                                        # 📸 Renderização Condicional da Foto (Estilo Crachá)
                                         img_html = ""
                                         if str(p_foto).startswith("http"):
-                                            # Foto redonda, tamanho reduzido, com sombra e borda combinando com o cartão
-                                            img_html = f"<img src='{p_foto}' style='width:50px; height:50px; border-radius:50%; object-fit:cover; margin-bottom:8px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
+                                            img_html = f"<img src='{p_foto}' style='width:45px; height:45px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
                                             
-                                        # Cartão de Integrante Individual
-                                        card_html = f"<div style='background-color:{bg_color}; border:2px solid {b_color}; "
-                                        card_html += f"border-radius:8px; padding:10px; min-width:160px; max-width:220px; "
-                                        card_html += f"flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: center;'>"
-                                        card_html += img_html # Injela a foto logo acima do nome
-                                        card_html += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
-                                        card_html += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
-                                        card_html += "</div>"
+                                        # Montagem do Cartão Interativo HTML
+                                        card_html = f"""
+                                        <div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:12px 10px; min-width:160px; max-width:220px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>
+                                            {img_html}
+                                            <div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>
+                                        """
+                                        
+                                        # Adiciona o Vulgo se ele existir
+                                        if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]:
+                                            card_html += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
+                                            
+                                        card_html += f"""
+                                            <div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>
+                                            
+                                            <div class='info-oculta'>
+                                                <div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div>
+                                            </div>
+                                        </div>
+                                        """
                                         
                                         html_organograma += card_html
                                         
