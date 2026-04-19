@@ -360,22 +360,28 @@ else:
         st.rerun()
 
     # =====================================================================
-    # CABEÇALHO - SISTEMA MERCÚRIO (Otimizado para Celular)
+    # CABEÇALHO - SISTEMA MERCÚRIO (Blindagem Mobile)
     # =====================================================================
     col_logos, col_titulo = st.columns([1.5, 4])
     
     with col_logos:
-        # Agrupa as duas logos lado a lado internamente
-        c1, c2 = st.columns(2)
-        with c1:
-            try: st.image("logo1.png", use_container_width=True)
-            except: pass
-        with c2:
-            try: st.image("logo2.png", use_container_width=True)
-            except: pass
+        # Tática de Galeria: Agrupa as imagens para forçar o lado a lado
+        # O tamanho fixo (width=85) impede que elas explodam na tela do celular
+        logos_ativos = []
+        try: 
+            open("logo1.png")
+            logos_ativos.append("logo1.png")
+        except: pass
+        
+        try: 
+            open("logo2.png")
+            logos_ativos.append("logo2.png")
+        except: pass
+        
+        if logos_ativos:
+            st.image(logos_ativos, width=85)
             
     with col_titulo:
-        # Título alinhado à esquerda acompanhando as logos
         st.markdown("<h1 style='text-align: left; margin-top: 10px;'>🛡️ SISTEMA MERCÚRIO</h1>", unsafe_allow_html=True)
         
     st.write("---")
