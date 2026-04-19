@@ -17,7 +17,7 @@ from io import StringIO
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
 # =====================================================================
-st.set_page_config(page_title="🛡️ Monitoramento de Homicídios", layout="wide")
+st.set_page_config(page_title="🛡️ Sistema Mercúrio", layout="wide")
 
 ID_PLANILHA_ACESSO = "1B_THJwz9AQ-UFxwYmXXUzA70BGzPTwNBp-7YlSBFrDw"
 ID_PLANILHA_CRIMES = "1P7eT63dyYrfVKos5-34VtWjtjzZsDgVJTGm_yObHYkc"
@@ -359,15 +359,25 @@ else:
         st.session_state.logado = False
         st.rerun()
 
-    col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-    with col_esq:
-        try: st.image("logo1.png", width=150)
-        except: st.write("")
-    with col_meio:
-        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    with col_dir:
-        try: st.image("logo2.png", width=150)
-        except: st.write("")
+    # =====================================================================
+    # CABEÇALHO - SISTEMA MERCÚRIO (Otimizado para Celular)
+    # =====================================================================
+    col_logos, col_titulo = st.columns([1.5, 4])
+    
+    with col_logos:
+        # Agrupa as duas logos lado a lado internamente
+        c1, c2 = st.columns(2)
+        with c1:
+            try: st.image("logo1.png", use_container_width=True)
+            except: pass
+        with c2:
+            try: st.image("logo2.png", use_container_width=True)
+            except: pass
+            
+    with col_titulo:
+        # Título alinhado à esquerda acompanhando as logos
+        st.markdown("<h1 style='text-align: left; margin-top: 10px;'>🛡️ SISTEMA MERCÚRIO</h1>", unsafe_allow_html=True)
+        
     st.write("---")
     
     df = carregar_dados()
