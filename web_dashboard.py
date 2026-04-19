@@ -498,42 +498,15 @@ else:
                                 html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'>"
                                 html_organograma += f"<h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
 
-                                # Injeta CSS tático para o Efeito Hover (Animação e Zoom)
-                                html_organograma += """
-                                <style>
-                                .tatico-card {
-                                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                                    position: relative;
-                                }
-                                .tatico-card:hover {
-                                    transform: scale(1.15);
-                                    z-index: 999;
-                                    box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important;
-                                }
-                                .tatico-card .info-oculta {
-                                    max-height: 0;
-                                    opacity: 0;
-                                    overflow: hidden;
-                                    transition: all 0.3s ease;
-                                }
-                                .tatico-card:hover .info-oculta {
-                                    max-height: 100px;
-                                    opacity: 1;
-                                    margin-top: 10px;
-                                    padding-top: 8px;
-                                    border-top: 1px dashed #7f8c8d;
-                                }
-                                .tatico-card img {
-                                    transition: all 0.3s ease;
-                                }
-                                .tatico-card:hover img {
-                                    width: 75px !important;
-                                    height: 75px !important;
-                                    border-radius: 8px !important; /* Perde o formato circular e revela a foto maior */
-                                    margin-bottom: 12px;
-                                }
-                                </style>
-                                """
+                                # CSS tático em linhas individuais para evitar o erro de bloco de código do Streamlit
+                                html_organograma += "<style>"
+                                html_organograma += ".tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }"
+                                html_organograma += ".tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }"
+                                html_organograma += ".tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }"
+                                html_organograma += ".tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }"
+                                html_organograma += ".tatico-card img { transition: all 0.3s ease; }"
+                                html_organograma += ".tatico-card:hover img { width: 75px !important; height: 75px !important; border-radius: 8px !important; margin-bottom: 12px; }"
+                                html_organograma += "</style>"
 
                                 df_org = df_area[df_area["Organização"] == org]
                                 ranks = {}
@@ -541,13 +514,12 @@ else:
                                     func = clean_text(r.get("Função", ""))
                                     nome = clean_text(r.get("Nome", ""))
                                     foto = r.get("Foto", "")
-                                    vulgo = clean_text(r.get("Vulgo", "N/I")) # Captura o Vulgo
-                                    rg = clean_text(r.get("RG", "N/I"))       # Captura o RG
+                                    vulgo = clean_text(r.get("Vulgo", "N/I"))
+                                    rg = clean_text(r.get("RG", "N/I"))
                                     
                                     if nome.upper() in ["NAN", "N/I", "", "-"]: continue
                                     idx, nome_nivel = get_nivel(func)
                                     if idx not in ranks: ranks[idx] = []
-                                    # Adiciona todos os dados na memória do pelotão
                                     ranks[idx].append((nome, func, foto, vulgo, rg)) 
 
                                 for rank_idx in sorted(ranks.keys()):
@@ -569,29 +541,21 @@ else:
                                         if str(p_foto).startswith("http"):
                                             img_html = f"<img src='{p_foto}' style='width:45px; height:45px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
                                             
-                                        # Montagem do Cartão Interativo HTML
-                                        card_html = f"""
-                                        <div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:12px 10px; min-width:160px; max-width:220px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>
-                                            {img_html}
-                                            <div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>
-                                        """
+                                        # Montagem do Cartão blindada contra formatação acidental
+                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:12px 10px; min-width:160px; max-width:220px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>"
+                                        html_organograma += f"{img_html}"
+                                        html_organograma += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
                                         
-                                        # Adiciona o Vulgo se ele existir
                                         if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]:
-                                            card_html += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
+                                            html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
                                             
-                                        card_html += f"""
-                                            <div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>
-                                            
-                                            <div class='info-oculta'>
-                                                <div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div>
-                                            </div>
-                                        </div>
-                                        """
-                                        
-                                        html_organograma += card_html
+                                        html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
+                                        html_organograma += f"<div class='info-oculta'>"
+                                        html_organograma += f"<div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div>"
+                                        html_organograma += f"</div></div>"
                                         
                                     html_organograma += "</div>" # Fecha Flexbox
+                                html_organograma += "</div>" # Fecha Org
                                 
                             # Renderiza todo o motor visual nativamente
                             st.markdown(html_organograma, unsafe_allow_html=True)
