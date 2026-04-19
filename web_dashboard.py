@@ -452,6 +452,9 @@ else:
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
                             def safe_id(txt): return "ID" + hashlib.md5(str(txt).encode('utf-8')).hexdigest()[:8]
 
+                            # --- NOVA ESTRUTURA VERTICAL OTIMIZADA ---
+                            
+                            # Definição de Hierarquia Tática Rigorosa
                             hierarquia = [
                                 ("DONO", "Dono"),
                                 ("FRENTE", "Frente"),
@@ -467,10 +470,14 @@ else:
                                     if chave in f_up: return idx, nome
                                 return 99, "Demais Integrantes / Funções"
 
+                            # Construção do Diagrama Nativo Graphviz - VETOR VERTICAL (LR)
                             dot = 'digraph G {\n'
                             dot += '  bgcolor="#0E1117";\n'
-                            dot += '  node [shape=box, style="filled,rounded", fontcolor=white, fontname="Helvetica,Arial,sans-serif"];\n'
-                            dot += '  edge [color="#666666", penwidth=1.5];\n'
+                            # rankdir=LR força o crescimento da esquerda para a direita (empilhando iguais verticalmente)
+                            dot += '  rankdir=LR;\n' 
+                            # Nodes menores e mais compactos
+                            dot += '  node [shape=box, style="filled,rounded", fontcolor=white, fontname="Helvetica,Arial,sans-serif", fontsize=11, height=0.3, width=1.2];\n'
+                            dot += '  edge [color="#666666", penwidth=1.0, arrowhead=vee, arrowsize=0.7];\n'
 
                             orgs = df_area["Organização"].dropna().unique()
                             
@@ -479,7 +486,8 @@ else:
                                 if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                                 
                                 id_org = safe_id(org_cl)
-                                dot += f'  "{id_org}" [label="🏢 {org_cl}", fillcolor="#1E2130", color="#ff4b4b", penwidth=2];\n'
+                                # Destaque da Orcrim (Vermelho)
+                                dot += f'  "{id_org}" [label="🏢 {org_cl}", fillcolor="#1E2130", color="#ff4b4b", penwidth=2, fontsize=13];\n'
 
                                 df_org = df_area[df_area["Organização"] == org]
                                 ranks = {}
@@ -492,26 +500,37 @@ else:
                                     ranks[idx].append((nome, func))
 
                                 prev_id = id_org
+                                # Itera sobre os ranks sorted (Dono -> Frente -> Gerente...)
                                 for rank_idx in sorted(ranks.keys()):
+                                    # Pega o nome do nível com base no primeiro item da lista
                                     nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
                                     id_nivel = safe_id(org_cl + str(rank_idx))
                                     
-                                    dot += f'  "{id_nivel}" [label="⚙️ {nome_nivel}", fillcolor="#2d3446", color="#F1C40F", penwidth=2];\n'
+                                    # Caixinha de Nível Hierárquico (Amarelo)
+                                    dot += f'  "{id_nivel}" [label="⚙️ {nome_nivel}", fillcolor="#2d3446", color="#F1C40F", penwidth=1.5];\n'
                                     dot += f'  "{prev_id}" -> "{id_nivel}";\n'
                                     
+                                    # Lista invisível para forçar empilhamento vertical perfeito dentro do rank
+                                    last_p_id = None
                                     for p_nome, p_func in ranks[rank_idx]:
                                         id_pessoa = safe_id(org_cl + p_nome + p_func)
+                                        
+                                        # Define cor: Vermelho se for o alvo selecionado, cinza se não
                                         if p_nome == clean_text(alvo_selecionado):
-                                            dot += f'  "{id_pessoa}" [label="🎯 {p_nome}\\n({p_func})", fillcolor="#E74C3C", color=white, penwidth=3];\n'
+                                            dot += f'  "{id_pessoa}" [label="🎯 {p_nome}\\n({p_func})", fillcolor="#E74C3C", color=white, penwidth=2];\n'
                                         else:
                                             dot += f'  "{id_pessoa}" [label="👤 {p_nome}\\n({p_func})", fillcolor="#4a4f63", color="#333333", penwidth=1];\n'
                                         
+                                        # Conecta o nível à pessoa
                                         dot += f'  "{id_nivel}" -> "{id_pessoa}";\n'
                                         
                                     prev_id = id_nivel
 
                             dot += '}\n'
+                            
+                            # Renderiza com largura total, mas agora a imagem crescerá para baixo
                             st.graphviz_chart(dot, use_container_width=True)
+                            # -----------------------------------------------------
 
                         else:
                             st.warning("O alvo não possui um território (Atuação) cadastrado para mapeamento.")
