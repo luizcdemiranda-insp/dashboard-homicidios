@@ -12,6 +12,7 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
 import time
+from io import StringIO
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -184,11 +185,10 @@ def pagina_mapa():
 # =====================================================================
 # 3. INTERFACE DE ACESSO
 # =====================================================================
-@st.cache_data(ttl=5) # Cache de 5 segundos para evitar spam na rede
+@st.cache_data(ttl=5) 
 def carregar_usuarios():
     url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
-    from io import StringIO
-    for _ in range(3): # Tenta 3 vezes de forma invisível
+    for _ in range(3): 
         try:
             res = requests.get(url, timeout=10)
             if res.status_code == 200:
@@ -264,7 +264,6 @@ def gerar_dashboard(df_filtrado):
     COL_DIA = next((c for c in df_filtrado.columns if "DIA" in str(c) and "SEMANA" in str(c)), None)
     COL_CIRCUNSCRICAO = next((c for c in df_filtrado.columns if "CIRCUNSCRI" in str(c)), None)
     
-    # Busca segura da coluna VITIMAS sem quebrar a linha
     COL_VITIMAS = None
     for c in df_filtrado.columns:
         if "VÍTIMAS" in str(c).upper() or "VITIMAS" in str(c).upper():
@@ -344,253 +343,4 @@ else:
 
     col_esq, col_meio, col_dir = st.columns([1, 4, 1])
     with col_esq:
-        try: st.image("logo1.png", width=150)
-        except: st.write("")
-    with col_meio:
-        st.markdown("<h1 style='text-align: center;'>🛡️ MONITORAMENTO DE HOMICÍDIOS</h1>", unsafe_allow_html=True)
-    with col_dir:
-        try: st.image("logo2.png", width=150)
-        except: st.write("")
-    st.write("---")
-    
-    df = carregar_dados()
-
-    if menu == "1. VISÃO GERAL":
-        st.header("📊 VISÃO GERAL")
-        df['ANO'] = df['ANO'].astype(int).astype(str)
-        anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
-        modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
-
-        anos_selecionados = []
-        if modo_analise == "ANÁLISE INDIVIDUAL":
-            col_drop, _ = st.columns([2, 8]) 
-            anos_selecionados = [col_drop.selectbox("SELECIONE O ANO:", anos_disp, key="ano_ind")]
-        else:
-            st.write("**SELECIONE OS ANOS:**")
-            def sel_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
-            def limp_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
-            for ano in anos_disp:
-                if f"chk_vg_{ano}" not in st.session_state: st.session_state[f"chk_vg_{ano}"] = True
-
-            b1, b2, _ = st.columns([2, 2, 6])
-            b1.button("✓ Todos", on_click=sel_all, key="btn_all_vg")
-            b2.button("✗ Limpar", on_click=limp_all, key="btn_clear_vg")
-            col_a = st.columns(min(len(anos_disp), 8) or 1, gap="small")
-            for i, ano in enumerate(anos_disp): col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
-            anos_selecionados = [a for a in anos_disp if st.session_state.get(f"chk_vg_{a}", False)]
-
-        if len(anos_selecionados) > 0:
-            df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
-            st.write("---")
-            if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
-            else: gerar_dashboard(df_filtrado)
-        else: st.warning("⚠️ Selecione pelo menos um ano.")
-
-    elif menu == "2. ORCRIM":
-        area_selecionada = str(sub_menu_orcrim)
-        if area_selecionada == "ÁREA 1":
-            st.header("📓 ÁREA 1 - INTELIGÊNCIA")
-            
-            with st.spinner("Sincronizando Central..."):
-                df_notion = carregar_dados_notion()
-                
-            if not df_notion.empty:
-                st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
-                
-                st.markdown("### 🎯 Busca Integrada de Alvos")
-                if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
-                def limpar_alvo(): st.session_state.alvo_busca = ""
-
-                nomes_disponiveis = df_notion["Nome"].dropna().unique().tolist()
-                
-                col_busca, col_btn, _ = st.columns([3, 1, 6])
-                alvo_selecionado = col_busca.selectbox("Selecione o Alvo:", [""] + nomes_disponiveis, key="alvo_busca")
-                col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                col_btn.button("🧹 Limpar", on_click=limpar_alvo)
-                
-                st.write("---")
-                
-                aba_dossie, aba_organograma, aba_tabela = st.tabs(["📇 DOSSIÊ TÁTICO", "🕸️ ORGANOGRAMA", "📋 TABELA GERAL"])
-                
-                with aba_dossie:
-                    if alvo_selecionado:
-                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        col_foto, col_info = st.columns([1, 2])
-                        with col_foto:
-                            foto_url = dados_alvo.get("Foto", "")
-                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
-                            else: st.info("👤 Sem foto no arquivo.")
-                                
-                        with col_info:
-                            vulgo = dados_alvo.get("Vulgo", "N/I")
-                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
-                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
-                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
-                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Atuação', 'N/I')}")
-                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
-                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
-                            
-                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
-                            st.write("---")
-                            st.markdown("#### 📝 Informe Analítico")
-                            st.warning(dados_alvo.get("Informe", ""))
-                    else:
-                        st.info("Aguardando seleção de alvo no buscador acima.")
-                
-                with aba_organograma:
-                    if alvo_selecionado:
-                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        atuacao_alvo = str(dados_alvo.get("Atuação", "")).strip()
-                        
-                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE"]:
-                            st.markdown(f"### Território: **{atuacao_alvo}**")
-                            df_area = df_notion[df_notion["Atuação"] == atuacao_alvo]
-                            
-                            def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
-                            def safe_id(txt): return "ID" + hashlib.md5(str(txt).encode('utf-8')).hexdigest()[:8]
-
-                            # --- NOVA ESTRUTURA VERTICAL OTIMIZADA ---
-                            
-                            # Definição de Hierarquia Tática Rigorosa
-                            hierarquia = [
-                                ("DONO", "Dono"),
-                                ("FRENTE", "Frente"),
-                                ("2", "2º em Comando"),
-                                ("SEGUNDO", "2º em Comando"),
-                                ("GERENTE", "Gerente"),
-                                ("LÍDER", "Liderança"),
-                                ("LIDER", "Liderança")
-                            ]
-                            def get_nivel(funcao):
-                                f_up = str(funcao).upper()
-                                for idx, (chave, nome) in enumerate(hierarquia):
-                                    if chave in f_up: return idx, nome
-                                return 99, "Demais Integrantes / Funções"
-
-                            # Construção do Diagrama Nativo Graphviz - VETOR VERTICAL (LR)
-                            dot = 'digraph G {\n'
-                            dot += '  bgcolor="#0E1117";\n'
-                            # rankdir=LR força o crescimento da esquerda para a direita (empilhando iguais verticalmente)
-                            dot += '  rankdir=LR;\n' 
-                            # Nodes menores e mais compactos
-                            dot += '  node [shape=box, style="filled,rounded", fontcolor=white, fontname="Helvetica,Arial,sans-serif", fontsize=11, height=0.3, width=1.2];\n'
-                            dot += '  edge [color="#666666", penwidth=1.0, arrowhead=vee, arrowsize=0.7];\n'
-
-                            orgs = df_area["Organização"].dropna().unique()
-                            
-                            for org in orgs:
-                                org_cl = clean_text(org)
-                                if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
-                                
-                                id_org = safe_id(org_cl)
-                                # Destaque da Orcrim (Vermelho)
-                                dot += f'  "{id_org}" [label="🏢 {org_cl}", fillcolor="#1E2130", color="#ff4b4b", penwidth=2, fontsize=13];\n'
-
-                                df_org = df_area[df_area["Organização"] == org]
-                                ranks = {}
-                                for _, r in df_org.iterrows():
-                                    func = clean_text(r.get("Função", ""))
-                                    nome = clean_text(r.get("Nome", ""))
-                                    if nome.upper() in ["NAN", "N/I", "", "-"]: continue
-                                    idx, nome_nivel = get_nivel(func)
-                                    if idx not in ranks: ranks[idx] = []
-                                    ranks[idx].append((nome, func))
-
-                                prev_id = id_org
-                                # Itera sobre os ranks sorted (Dono -> Frente -> Gerente...)
-                                for rank_idx in sorted(ranks.keys()):
-                                    # Pega o nome do nível com base no primeiro item da lista
-                                    nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                    id_nivel = safe_id(org_cl + str(rank_idx))
-                                    
-                                    # Caixinha de Nível Hierárquico (Amarelo)
-                                    dot += f'  "{id_nivel}" [label="⚙️ {nome_nivel}", fillcolor="#2d3446", color="#F1C40F", penwidth=1.5];\n'
-                                    dot += f'  "{prev_id}" -> "{id_nivel}";\n'
-                                    
-                                    # Lista invisível para forçar empilhamento vertical perfeito dentro do rank
-                                    last_p_id = None
-                                    for p_nome, p_func in ranks[rank_idx]:
-                                        id_pessoa = safe_id(org_cl + p_nome + p_func)
-                                        
-                                        # Define cor: Vermelho se for o alvo selecionado, cinza se não
-                                        if p_nome == clean_text(alvo_selecionado):
-                                            dot += f'  "{id_pessoa}" [label="🎯 {p_nome}\\n({p_func})", fillcolor="#E74C3C", color=white, penwidth=2];\n'
-                                        else:
-                                            dot += f'  "{id_pessoa}" [label="👤 {p_nome}\\n({p_func})", fillcolor="#4a4f63", color="#333333", penwidth=1];\n'
-                                        
-                                        # Conecta o nível à pessoa
-                                        dot += f'  "{id_nivel}" -> "{id_pessoa}";\n'
-                                        
-                                    prev_id = id_nivel
-
-                            dot += '}\n'
-                            
-                            # Renderiza com largura total, mas agora a imagem crescerá para baixo
-                            st.graphviz_chart(dot, use_container_width=True)
-                            # -----------------------------------------------------
-
-                        else:
-                            st.warning("O alvo não possui um território (Atuação) cadastrado para mapeamento.")
-                    else:
-                        st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
-
-                with aba_tabela:
-                    ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Atuação", "Organização", "Função", "Situação", "Rede social", "Informe"] 
-                    c_ex = [c for c in ordem_ideal if c in df_notion.columns]
-                    c_extra = [c for c in df_notion.columns if c not in c_ex]
-                    df_notion = df_notion[c_ex + c_extra]
-
-                    with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
-                        col_at = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
-                        col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
-                        col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
-                        
-                        df_filt = df_notion.copy()
-                        c1, c2, c3 = st.columns(3)
-                        
-                        if col_at:
-                            sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist())
-                            if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
-                        if col_fn:
-                            sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist())
-                            if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
-                        if col_org:
-                            sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist())
-                            if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
-
-                    st.write("---")
-                    cfg = {}
-                    for c in df_filt.columns:
-                        if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
-                        elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
-
-                    st.dataframe(df_filt, column_config=cfg, use_container_width=True)
-            else:
-                st.warning("Sem dados.")
-        else:
-            st.info(f"O painel da {area_selecionada} está em estruturação.")
-
-    elif menu == "3. MAPA":
-        pagina_mapa()
-
-    elif menu == "4. MODO ANALÍTICO":
-        st.header("📑 MODO ANALÍTICO")
-        st.dataframe(df)
-
-    elif menu == "5. ASSISTENTE IA":
-        st.header("🤖 Analista Criminal Virtual")
-        api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
-        if api_key:
-            try:
-                genai.configure(api_key=api_key)
-                st.success("Sistemas prontos.")
-            except:
-                st.error("Erro na chave.")
-
-    elif menu == "⚙️ CONFIGURAÇÕES":
-        st.header("⚙️ Administrador")
-        try: st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
-        except: st.error("Erro ao carregar usuários.")
+        try: st
