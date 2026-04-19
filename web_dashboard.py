@@ -184,6 +184,22 @@ def pagina_mapa():
 # =====================================================================
 # 3. INTERFACE DE ACESSO
 # =====================================================================
+@st.cache_data(ttl=5) # Cache de 5 segundos para evitar spam na rede
+def carregar_usuarios():
+    url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_ACESSO}/gviz/tq?tqx=out:csv&sheet=USUARIOS"
+    from io import StringIO
+    for _ in range(3): # Tenta 3 vezes de forma invisível
+        try:
+            res = requests.get(url, timeout=10)
+            if res.status_code == 200:
+                df = pd.read_csv(StringIO(res.text))
+                df.columns = [str(c).strip().upper() for c in df.columns]
+                df['MATRICULA'] = df['MATRICULA'].astype(str).str.strip()
+                return df
+        except:
+            time.sleep(1)
+    return pd.DataFrame()
+
 def tela_acesso():
     col_esq, col_meio, col_dir = st.columns([1, 4, 1])
     with col_meio:
@@ -193,22 +209,27 @@ def tela_acesso():
         with aba_login:
             mat_login = st.text_input("Matrícula", key="login_mat_input")
             senha_login = st.text_input("Senha", type="password", key="login_pass_input")
+            
             if st.button("Acessar Painel"):
-                try:
-                    df_users = conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS", ttl=0)
-                    df_users.columns = [str(col).strip().upper() for col in df_users.columns]
-                    df_users['MATRICULA'] = df_users['MATRICULA'].astype(str).str.strip()
-                    senha_hash = gerar_hash(senha_login)
-                    user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
-                    if not user_match.empty:
-                        if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
-                            st.session_state.logado = True
-                            st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
-                            st.session_state.user_nome = user_match.iloc[0]['NOME']
-                            st.rerun()
-                        else: st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
-                    else: st.error("Matrícula ou Senha incorretos.")
-                except Exception as e: st.error(f"Erro na base de usuários. Verifique a conexão. Detalhe: {e}")
+                with st.spinner("Autenticando..."):
+                    df_users = carregar_usuarios()
+                    
+                    if not df_users.empty:
+                        senha_hash = gerar_hash(senha_login)
+                        user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
+                        
+                        if not user_match.empty:
+                            if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
+                                st.session_state.logado = True
+                                st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
+                                st.session_state.user_nome = user_match.iloc[0]['NOME']
+                                st.rerun()
+                            else: 
+                                st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
+                        else: 
+                            st.error("Matrícula ou Senha incorretos.")
+                    else:
+                        st.error("Falha ao contatar o servidor de credenciais. Tente novamente.")
 
         with aba_cadastro:
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
