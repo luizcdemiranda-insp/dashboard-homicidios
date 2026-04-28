@@ -142,9 +142,16 @@ def carregar_dados_notion():
                     val = dados_coluna.get("date")
                     linha[nome_coluna] = val.get("start") if val else ""
                 elif tipo == "checkbox": linha[nome_coluna] = dados_coluna.get("checkbox")
+                
+                # --- AJUSTE PARA LER RELAÇÕES (CUIDADO: RETORNA IDs E NÃO TEXTOS) ---
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
-                    linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)" if relacoes else ""
+                    if relacoes:
+                        # Extrai o ID da relação, pois o Notion não envia o nome aqui
+                        ids_relacionados = [r.get("id")[:8] for r in relacoes]
+                        linha[nome_coluna] = f"ID: {', '.join(ids_relacionados)}..."
+                    else:
+                        linha[nome_coluna] = ""
                 
                 # --- CHAVE MESTRA: EXTRATOR UNIVERSAL DE ROLLUP ---
                 elif tipo == "rollup":
@@ -387,8 +394,6 @@ else:
     col_logos, col_titulo = st.columns([1.5, 4])
     
     with col_logos:
-        # Tática de Galeria: Agrupa as imagens para forçar o lado a lado
-        # O tamanho fixo (width=85) impede que elas explodam na tela do celular
         logos_ativos = []
         try: 
             open("logo1.png")
@@ -413,9 +418,7 @@ else:
     if menu == "1. VISÃO GERAL":
         st.header("📊 VISÃO GERAL")
         
-        # --- BLOCO DE DATA DE ATUALIZAÇÃO (COLUNA F) ---
         try:
-            # Pega o valor da coluna F (índice 5) da última linha do CSV
             data_atualizacao = df.iloc[-1, 5] 
             st.markdown(f"""
                 <div style='color:#2ecc71; font-size:11px; font-style:italic; margin-top:-15px; margin-bottom:15px;'>
@@ -423,14 +426,12 @@ else:
                 </div>
             """, unsafe_allow_html=True)
         except Exception as e:
-            pass # Silencioso caso a coluna ou linha não exista
-        # ----------------------------------------------
+            pass 
 
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
         modo_analise = st.radio("SELECIONE O FORMATO:", ["ANÁLISE INDIVIDUAL", "ANÁLISE COMPARATIVA"], key="modo_vg")
 
-        # --- RESTAURAÇÃO DO MOTOR DE GRÁFICOS ---
         anos_selecionados = []
         if modo_analise == "ANÁLISE INDIVIDUAL":
             col_drop, _ = st.columns([2, 8]) 
@@ -455,7 +456,7 @@ else:
             df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
             st.write("---")
             if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
-            else: gerar_dashboard(df_filtrado) # Chama os gráficos de volta
+            else: gerar_dashboard(df_filtrado) 
         else: st.warning("⚠️ Selecione pelo menos um ano.")
 
     elif menu == "2. ORCRIM":
@@ -529,26 +530,17 @@ else:
                             def get_nivel(funcao):
                                 f_up = str(funcao).upper()
                                 
-                                # NÍVEL 1: Comando Máximo
                                 if "DONO" in f_up: 
                                     return 1, "DONO"
-                                    
-                                # NÍVEL 2: Meio Comando
                                 elif "FRENTE" in f_up: 
                                     return 2, "FRENTE"
-                                    
-                                # NÍVEL 3: Liderança Operacional
                                 elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: 
                                     return 3, "GERÊNCIA / LIDERANÇA"
-                                    
-                                # NÍVEL 4: Base (Sem hierarquia interna)
                                 else: 
                                     return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
                             
-                            # Restaura a lista de organizações que estava faltando
                             orgs = df_area["Organização"].dropna().unique().tolist()
                             
-                            # Início do Bloco HTML Master
                             html_organograma = ""
                             html_organograma += f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'>"
                             html_organograma += f"<h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2>"
@@ -561,7 +553,6 @@ else:
                                 html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'>"
                                 html_organograma += f"<h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
 
-                                # CSS tático em linhas individuais para evitar o erro de bloco de código do Streamlit
                                 html_organograma += "<style>"
                                 html_organograma += ".tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }"
                                 html_organograma += ".tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }"
@@ -604,7 +595,6 @@ else:
                                         if str(p_foto).startswith("http"):
                                             img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
                                             
-                                        # Montagem do Cartão blindada contra formatação acidental
                                         html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>"
                                         html_organograma += f"{img_html}"
                                         html_organograma += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
@@ -617,10 +607,9 @@ else:
                                         html_organograma += f"<div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div>"
                                         html_organograma += f"</div></div>"
                                         
-                                    html_organograma += "</div>" # Fecha Flexbox
-                                html_organograma += "</div>" # Fecha Org
+                                    html_organograma += "</div>"
+                                html_organograma += "</div>"
                                 
-                            # Renderiza todo o motor visual nativamente
                             st.markdown(html_organograma, unsafe_allow_html=True)
 
                         else:
@@ -661,27 +650,3 @@ else:
                     st.dataframe(df_filt, column_config=cfg, use_container_width=True)
             else:
                 st.warning("Sem dados.")
-        else:
-            st.info(f"O painel da {area_selecionada} está em estruturação.")
-
-    elif menu == "3. MAPA":
-        pagina_mapa()
-
-    elif menu == "4. MODO ANALÍTICO":
-        st.header("📑 MODO ANALÍTICO")
-        st.dataframe(df)
-
-    elif menu == "5. ASSISTENTE IA":
-        st.header("🤖 Analista Criminal Virtual")
-        api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
-        if api_key:
-            try:
-                genai.configure(api_key=api_key)
-                st.success("Sistemas prontos.")
-            except:
-                st.error("Erro na chave.")
-
-    elif menu == "⚙️ CONFIGURAÇÕES":
-        st.header("⚙️ Administrador")
-        try: st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
-        except: st.error("Erro ao carregar usuários.")
