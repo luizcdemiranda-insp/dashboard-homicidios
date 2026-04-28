@@ -498,23 +498,25 @@ else:
                             
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
 
-                            # Hierarquia Tática 
-                            hierarquia = [
-                                ("DONO", "DONO"),
-                                ("FRENTE", "FRENTE"),
-                                ("2", "2º EM COMANDO"),
-                                ("SEGUNDO", "2º EM COMANDO"),
-                                ("GERENTE", "GERENTES"),
-                                ("LÍDER", "LIDERANÇA"),
-                                ("LIDER", "LIDERANÇA")
-                            ]
+                            # --- CÉREBRO HIERÁRQUICO (4 NÍVEIS RIGOROSOS) ---
                             def get_nivel(funcao):
                                 f_up = str(funcao).upper()
-                                for idx, (chave, nome) in enumerate(hierarquia):
-                                    if chave in f_up: return idx, nome
-                                return 99, "INTEGRANTES / OUTRAS FUNÇÕES"
-
-                            orgs = df_area["Organização"].dropna().unique()
+                                
+                                # NÍVEL 1: Comando Máximo
+                                if "DONO" in f_up: 
+                                    return 1, "DONO"
+                                    
+                                # NÍVEL 2: Meio Comando
+                                elif "FRENTE" in f_up: 
+                                    return 2, "FRENTE"
+                                    
+                                # NÍVEL 3: Liderança Operacional
+                                elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: 
+                                    return 3, "GERÊNCIA / LIDERANÇA"
+                                    
+                                # NÍVEL 4: Base (Sem hierarquia interna)
+                                else: 
+                                    return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
                             
                             # Início do Bloco HTML Master
                             html_organograma = ""
