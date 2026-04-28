@@ -477,7 +477,7 @@ else:
                             st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
                             st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
                             st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Território:** {dados_alvo.get('Território', 'N/I')}")
+                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Território', 'N/I')}")
                             st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
                             st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
                             
@@ -493,7 +493,7 @@ else:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
                         atuacao_alvo = str(dados_alvo.get("Território", "")).strip()
                         
-                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE"]:
+                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
                             df_area = df_notion[df_notion["Território"] == atuacao_alvo]
                             
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
@@ -605,7 +605,7 @@ else:
                     df_notion = df_notion[c_ex + c_extra]
 
                     with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
-                        col_at = next((c for c in df_notion.columns if "Território" in c.upper() or "ATUACAO" in c.upper()), None)
+                        col_at = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), None)
                         col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
                         col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
                         
