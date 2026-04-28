@@ -491,10 +491,10 @@ else:
                 with aba_organograma:
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        atuacao_alvo = str(dados_alvo.get("Atuação", "")).strip()
+                        atuacao_alvo = str(dados_alvo.get("Território", "")).strip()
                         
                         if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE"]:
-                            df_area = df_notion[df_notion["Atuação"] == atuacao_alvo]
+                            df_area = df_notion[df_notion["Território"] == atuacao_alvo]
                             
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
 
