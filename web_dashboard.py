@@ -492,10 +492,11 @@ st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
                 with aba_organograma:
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        atuacao_alvo = str(dados_alvo.get("Território", "")).strip()
-                        
-                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
-                            df_area = df_notion[df_notion["Território"] == atuacao_alvo]
+col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
+atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
+
+if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
+    df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
                             
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
 
