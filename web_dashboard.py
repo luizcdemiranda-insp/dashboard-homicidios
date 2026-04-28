@@ -477,7 +477,7 @@ else:
                             st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
                             st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
                             st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Atuação', 'N/I')}")
+                            st.markdown(f"**Área de Território:** {dados_alvo.get('Território', 'N/I')}")
                             st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
                             st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
                             
@@ -594,18 +594,18 @@ else:
                             st.markdown(html_organograma, unsafe_allow_html=True)
 
                         else:
-                            st.warning("O alvo não possui um território (Atuação) cadastrado para mapeamento.")
+                            st.warning("O alvo não possui um território (Território) cadastrado para mapeamento.")
                     else:
                         st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
 
                 with aba_tabela:
-                    ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Atuação", "Organização", "Função", "Situação", "Rede social", "Informe"] 
+                    ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
                     c_ex = [c for c in ordem_ideal if c in df_notion.columns]
                     c_extra = [c for c in df_notion.columns if c not in c_ex]
                     df_notion = df_notion[c_ex + c_extra]
 
                     with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
-                        col_at = next((c for c in df_notion.columns if "ATUAÇÃO" in c.upper() or "ATUACAO" in c.upper()), None)
+                        col_at = next((c for c in df_notion.columns if "Território" in c.upper() or "ATUACAO" in c.upper()), None)
                         col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
                         col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
                         
