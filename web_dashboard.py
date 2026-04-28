@@ -477,7 +477,8 @@ else:
                             st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
                             st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
                             st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Atuação:** {dados_alvo.get('Território', 'N/I')}")
+                            col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
+st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
                             st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
                             st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
                             
