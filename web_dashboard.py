@@ -568,7 +568,7 @@ else:
                                 html_organograma += ".tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }"
                                 html_organograma += ".tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }"
                                 html_organograma += ".tatico-card img { transition: all 0.3s ease; }"
-                                html_organograma += ".tatico-card:hover img { width: 75px !important; height: 75px !important; border-radius: 8px !important; margin-bottom: 12px; }"
+                                html_organograma += ".tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }"
                                 html_organograma += "</style>"
 
                                 df_org = df_area[df_area["Organização"] == org]
@@ -602,10 +602,10 @@ else:
                                             
                                         img_html = ""
                                         if str(p_foto).startswith("http"):
-                                            img_html = f"<img src='{p_foto}' style='width:45px; height:45px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
+                                            img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
                                             
                                         # Montagem do Cartão blindada contra formatação acidental
-                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:12px 10px; min-width:160px; max-width:220px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>"
+                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>"
                                         html_organograma += f"{img_html}"
                                         html_organograma += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
                                         
