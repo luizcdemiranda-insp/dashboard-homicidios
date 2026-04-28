@@ -145,13 +145,35 @@ def carregar_dados_notion():
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
                     linha[nome_coluna] = f"🔗 {len(relacoes)} Vinculada(s)" if relacoes else ""
+                
+                # --- CHAVE MESTRA: EXTRATOR UNIVERSAL DE ROLLUP ---
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
-                    if rollup.get("type") == "array":
-                        vals = rollup.get("array", [])
-                        textos = ["".join([t.get("plain_text", "") for t in v.get(v.get("type"), [])]) for v in vals]
-                        linha[nome_coluna] = ", ".join(textos)
-                    else: linha[nome_coluna] = "Agregação"
+                    r_type = rollup.get("type")
+                    if r_type == "array":
+                        textos = []
+                        for val in rollup.get("array", []):
+                            v_type = val.get("type")
+                            if v_type in ["title", "rich_text"]:
+                                textos.append("".join([t.get("plain_text", "") for t in val.get(v_type, [])]))
+                            elif v_type == "select":
+                                sel = val.get("select")
+                                if sel: textos.append(sel.get("name", ""))
+                            elif v_type == "multi_select":
+                                msel = val.get("multi_select", [])
+                                textos.append(", ".join([s.get("name", "") for s in msel]))
+                        linha[nome_coluna] = ", ".join(filter(None, textos))
+                    elif r_type == "string":
+                        linha[nome_coluna] = str(rollup.get("string", ""))
+                    else:
+                        linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
+                
+                # --- EXTRATOR DE FÓRMULAS ---
+                elif tipo == "formula":
+                    form = dados_coluna.get("formula", {})
+                    f_type = form.get("type")
+                    linha[nome_coluna] = str(form.get(f_type, ""))
+                
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
