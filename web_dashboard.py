@@ -236,35 +236,39 @@ def pagina_mapa():
                 folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
 
             # =======================================================
-            # 🔲 2. MOTOR TÁTICO: DECODIFICADOR KMZ NATIVO
+            # 🔲 2. MOTOR TÁTICO: DECODIFICADOR KMZ NATIVO (BLINDADO)
             # =======================================================
             try:
                 import zipfile
                 import xml.etree.ElementTree as ET
+                import re
 
                 camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
                 arquivo_kmz = "AREAS_SENSIVEIS_1_1999.kmz"
                 
-                # Descompacta e lê o XML dentro do KMZ
+                # Descompacta e extrai o texto bruto do KMZ
                 with zipfile.ZipFile(arquivo_kmz, 'r') as kmz:
                     kml_nome = [n for n in kmz.namelist() if n.endswith('.kml')][0]
                     with kmz.open(kml_nome, 'r') as kml_file:
-                        # Extrai as tags blindando contra Namespaces (Padrão Google)
-                        it = ET.iterparse(kml_file)
-                        for _, el in it:
-                            _, _, el.tag = el.tag.rpartition('}')
-                        root = it.root
+                        xml_texto = kml_file.read().decode('utf-8', errors='ignore')
                 
+                # A MÁGICA: "Lavagem Ácida" para destruir o escudo de Namespaces do Google
+                xml_texto = re.sub(r'\sxmlns="[^"]+"', '', xml_texto)
+                xml_texto = re.sub(r'\sxmlns:\w+="[^"]+"', '', xml_texto)
+                
+                # Agora o Python consegue ler a estrutura perfeitamente
+                root = ET.fromstring(xml_texto)
                 placemarks = root.findall('.//Placemark')
+                
                 if placemarks:
-                    st.info(f"📍 Mapeando {len(placemarks)} territórios diretamente do KMZ...")
+                    st.info(f"📍 Decodificando {len(placemarks)} territórios protegidos do arquivo KMZ...")
                     
                     for placemark in placemarks:
-                        # 1. Busca de Nomes e Atributos Ocultos
-                        nome_node = placemark.find('name')
+                        # 1. Busca de Nomes e Atributos Ocultos (o .// busca em qualquer profundidade)
+                        nome_node = placemark.find('.//name')
                         nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
                         
-                        desc_node = placemark.find('description')
+                        desc_node = placemark.find('.//description')
                         desc_text = desc_node.text if desc_node is not None and desc_node.text else ""
                         
                         ext_node = placemark.find('.//ExtendedData')
@@ -292,16 +296,15 @@ def pagina_mapa():
                                 pontos_brutos = coord_text.split()
                                 
                                 coords_limpas = []
-                                # Otimizador Tático (Evita estouro de RAM em favelas enormes)
+                                # Otimizador Tático para não explodir a memória do navegador
                                 passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
                                 
                                 for pt in pontos_brutos[::passo]:
                                     valores = pt.split(',')
                                     if len(valores) >= 2:
                                         try:
-                                            # Google usa (Longitude, Latitude). Folium usa (Latitude, Longitude)
-                                            lon = float(valores[0])
-                                            lat = float(valores[1])
+                                            lon = float(valores[0].strip())
+                                            lat = float(valores[1].strip())
                                             coords_limpas.append([lat, lon]) 
                                         except: pass
                                 
@@ -319,7 +322,7 @@ def pagina_mapa():
                     
                     camada_areas.add_to(m)
                 else:
-                    st.warning("⚠️ O KMZ foi aberto com sucesso, mas não contém áreas geográficas mapeadas.")
+                    st.warning("⚠️ O KMZ foi aberto, a lavagem ácida foi feita, mas não foram encontrados polígonos.")
 
             except FileNotFoundError:
                 st.error("⚠️ ALERTA: O arquivo 'AREAS_SENSIVEIS_1_1999.kmz' não foi encontrado. Coloque-o na mesma pasta do código.")
