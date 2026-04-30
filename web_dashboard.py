@@ -255,7 +255,7 @@ def pagina_mapa():
                 
                 # Cole AQUI o link RAW do seu arquivo KML no GitHub
                 # Exemplo: "https://raw.githubusercontent.com/SeuUsuario/SeuRepo/main/AREAS_SENSIVEIS_1_1999.kml"
-                url_kml_github = "COLE_AQUI_O_LINK_RAW_DO_GITHUB"
+                url_kml_github = "https://raw.githubusercontent.com/luizcdemiranda-insp/dashboard-homicidios/refs/heads/main/AREAS_SENSIVEIS_1_1999.kml"
                 
                 xml_texto = carregar_kml_github(url_kml_github)
                 
