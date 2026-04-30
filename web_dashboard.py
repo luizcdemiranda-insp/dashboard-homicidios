@@ -197,37 +197,53 @@ def carregar_dados_notion():
 # =====================================================================
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
-    df = carregar_dados()
+    
+    with st.spinner("📡 Baixando coordenadas da base central..."):
+        df = carregar_dados()
+        
     col_lat = next((c for c in df.columns if "LAT" in c.upper()), None)
     col_lon = next((c for c in df.columns if "LON" in c.upper()), None)
 
     if col_lat and col_lon:
-        df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
-        df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
-        df_mapa = df.copy()
-        df_mapa[col_lat] = df_lat_limpa
-        df_mapa[col_lon] = df_lon_limpa
-        df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
-        st.success(f"✅ {len(df_mapa)} pontos localizados.")
+        with st.spinner("⚙️ Limpando e processando dados geográficos..."):
+            df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
+            df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
+            df_mapa = df.copy()
+            df_mapa[col_lat] = df_lat_limpa
+            df_mapa[col_lon] = df_lon_limpa
+            df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
+            
+            total_pontos = len(df_mapa)
+            
+            # --- TRAVA DE SEGURANÇA CONTRA CONGELAMENTO DE TELA ---
+            limite_tatico = 1000
+            if total_pontos > limite_tatico:
+                st.warning(f"⚠️ Base massiva detectada ({total_pontos} registros). Plotando as {limite_tatico} ocorrências mais recentes para estabilizar o navegador.")
+                df_mapa = df_mapa.tail(limite_tatico)
+            else:
+                st.success(f"✅ {total_pontos} pontos prontos para plotagem.")
 
-        m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
-        folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
-        folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
-        Draw(export=False, position='topleft').add_to(m)
+        with st.spinner("🗺️ Renderizando satélite e inserindo alvos (isso pode levar alguns segundos)..."):
+            m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
+            folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
+            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
+            Draw(export=False, position='topleft').add_to(m)
 
-        col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
-        col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
-        col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
-        col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
-        col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
+            col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
+            col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
+            col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
+            col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
+            col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
 
-        mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
-        for _, row in df_mapa.iterrows():
-            html_popup = f"""<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"""
-            folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
-        folium.LayerControl().add_to(m)
-        st_folium(m, width=1200, height=600, returned_objects=[])
-    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+            mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
+            for _, row in df_mapa.iterrows():
+                html_popup = f"""<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"""
+                folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
+            
+            folium.LayerControl().add_to(m)
+            st_folium(m, width=1200, height=600, returned_objects=[])
+            
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas na base do Google Sheets.")
 
 # =====================================================================
 # 3. INTERFACE DE ACESSO
