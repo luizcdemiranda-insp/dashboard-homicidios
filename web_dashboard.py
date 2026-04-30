@@ -236,45 +236,66 @@ def pagina_mapa():
             # 🛡️ MOTOR TÁTICO: CAMADA DE POLÍGONOS (ÁREAS SENSÍVEIS)
             # =======================================================
             try:
-                # Carrega o CSV de polígonos
-                df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", on_bad_lines='skip')
+                # 1. Carrega o CSV forçando a leitura de qualquer separador
+                df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", sep=None, engine='python', on_bad_lines='skip')
                 
-                # Cria uma camada separada que o usuário pode ligar/desligar no mapa
                 camada_areas = folium.FeatureGroup(name="🔲 Territórios (Mancha Criminal)")
                 
-                for _, row_poly in df_poly.iterrows():
-                    wkt_str = str(row_poly.get('WKT', ''))
+                # 2. Busca o nome exato das colunas (blindagem contra espaços)
+                col_wkt = next((c for c in df_poly.columns if "WKT" in c.upper()), None)
+                col_faccao = next((c for c in df_poly.columns if "FAC" in c.upper() or "DESCRI" in c.upper()), None)
+                col_nome = next((c for c in df_poly.columns if "NOME" in c.upper() or "AREA" in c.upper() or "ÁREA" in c.upper()), None)
+
+                if col_wkt:
+                    # 3. Trava de Segurança: Remove linhas vazias e limita a 100 áreas primeiro
+                    df_poly_seguro = df_poly.dropna(subset=[col_wkt]).head(100)
                     
-                    if "POLYGON" in wkt_str.upper():
-                        # Inteligência Visual: Cores por Facção
-                        faccao = str(row_poly.get('Facção', '')).upper().strip()
-                        if "CV" in faccao: cor_area = "#E74C3C"      # Vermelho
-                        elif "TCP" in faccao: cor_area = "#3498DB"   # Azul
-                        elif "MILICIA" in faccao or "MILÍCIA" in faccao: cor_area = "#F39C12" # Laranja
-                        else: cor_area = "#95A5A6"                   # Cinza
+                    if len(df_poly_seguro) > 0:
+                        st.info(f"📍 Mapeando {len(df_poly_seguro)} territórios estratégicos. Otimizando malha...")
                         
-                        nome_area = str(row_poly.get('Nome', 'Área Sensível'))
+                        for _, row_poly in df_poly_seguro.iterrows():
+                            wkt_str = str(row_poly[col_wkt])
+                            
+                            if "POLYGON" in wkt_str.upper():
+                                # Identificação Visual
+                                faccao = str(row_poly[col_faccao]).upper().strip() if col_faccao else ""
+                                if "CV" in faccao: cor_area = "#E74C3C"      
+                                elif "TCP" in faccao: cor_area = "#3498DB"   
+                                elif "MILICIA" in faccao or "MILÍCIA" in faccao: cor_area = "#F39C12" 
+                                else: cor_area = "#95A5A6"                   
+                                
+                                nome_area = str(row_poly[col_nome]) if col_nome else "Área Restrita"
+                                
+                                # Extração Matemática
+                                import re
+                                pontos = re.findall(r'(-?\d+\.\d+)\s+(-?\d+\.\d+)', wkt_str)
+                                
+                                # 4. Redutor Tático de Vértices (O Segredo para não travar)
+                                # Se a área tiver mais de 300 pontos, ele pega 1 a cada 3 pontos.
+                                passo = 4 if len(pontos) > 1000 else (2 if len(pontos) > 300 else 1)
+                                coords = [[float(lat), float(lon)] for lon, lat in pontos[::passo]]
+                                
+                                if coords:
+                                    folium.Polygon(
+                                        locations=coords,
+                                        color=cor_area,
+                                        weight=2,
+                                        fill=True,
+                                        fill_color=cor_area,
+                                        fill_opacity=0.3,
+                                        tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
+                                    ).add_to(camada_areas)
                         
-                        # Decodificador Tático de Coordenadas
-                        import re
-                        pontos = re.findall(r'(-?\d+\.\d+)\s+(-?\d+\.\d+)', wkt_str)
-                        coords = [[float(lat), float(lon)] for lon, lat in pontos]
-                        
-                        if coords:
-                            folium.Polygon(
-                                locations=coords,
-                                color=cor_area,
-                                weight=2,
-                                fill=True,
-                                fill_color=cor_area,
-                                fill_opacity=0.3,
-                                tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
-                            ).add_to(camada_areas)
-                
-                # Adiciona a nova camada ao mapa
-                camada_areas.add_to(m)
+                        camada_areas.add_to(m)
+                    else:
+                        st.warning("⚠️ O arquivo foi lido, mas nenhuma coordenada válida (WKT) foi encontrada.")
+                else:
+                    st.warning("⚠️ Coluna 'WKT' não encontrada na planilha. Verifique o cabeçalho.")
+
+            except FileNotFoundError:
+                st.error("⚠️ ALERTA: O arquivo 'MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv' não foi encontrado. Ele está na mesma pasta do código?")
             except Exception as e:
-                pass # Em caso de falha de leitura, o sistema passa direto sem quebrar o mapa
+                st.error(f"⚠️ Erro Crítico ao processar as áreas: {e}")
             # =======================================================
 
             folium.LayerControl().add_to(m)
