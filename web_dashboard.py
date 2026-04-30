@@ -236,67 +236,95 @@ def pagina_mapa():
                 folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
 
             # =======================================================
-            # 🔲 2. MOTOR TÁTICO: CAMADA DE POLÍGONOS BLINDADA
+            # 🔲 2. MOTOR TÁTICO: DECODIFICADOR KMZ NATIVO
             # =======================================================
             try:
-                df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", sep=None, engine='python', on_bad_lines='skip')
-                camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
-                
-                col_wkt = next((c for c in df_poly.columns if "WKT" in c.upper()), None)
-                col_faccao = next((c for c in df_poly.columns if "FAC" in c.upper() or "DESCRI" in c.upper()), None)
-                col_nome = next((c for c in df_poly.columns if "NOME" in c.upper() or "AREA" in c.upper() or "ÁREA" in c.upper()), None)
+                import zipfile
+                import xml.etree.ElementTree as ET
 
-                if col_wkt:
-                    df_poly_seguro = df_poly.dropna(subset=[col_wkt]).head(100)
-                    if len(df_poly_seguro) > 0:
-                        st.info(f"📍 Analisando e cruzando {len(df_poly_seguro)} territórios com dados criminais...")
-                        import re
+                camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
+                arquivo_kmz = "AREAS_SENSIVEIS_1_1999.kmz"
+                
+                # Descompacta e lê o XML dentro do KMZ
+                with zipfile.ZipFile(arquivo_kmz, 'r') as kmz:
+                    kml_nome = [n for n in kmz.namelist() if n.endswith('.kml')][0]
+                    with kmz.open(kml_nome, 'r') as kml_file:
+                        # Extrai as tags blindando contra Namespaces (Padrão Google)
+                        it = ET.iterparse(kml_file)
+                        for _, el in it:
+                            _, _, el.tag = el.tag.rpartition('}')
+                        root = it.root
+                
+                placemarks = root.findall('.//Placemark')
+                if placemarks:
+                    st.info(f"📍 Mapeando {len(placemarks)} territórios diretamente do KMZ...")
+                    
+                    for placemark in placemarks:
+                        # 1. Busca de Nomes e Atributos Ocultos
+                        nome_node = placemark.find('name')
+                        nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
                         
-                        for _, row_poly in df_poly_seguro.iterrows():
-                            wkt_str = str(row_poly[col_wkt])
+                        desc_node = placemark.find('description')
+                        desc_text = desc_node.text if desc_node is not None and desc_node.text else ""
+                        
+                        ext_node = placemark.find('.//ExtendedData')
+                        ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
+                        
+                        # Inteligência de Cores
+                        texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
+                        if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: 
+                            cor_area, faccao = "#E74C3C", "CV"
+                        elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: 
+                            cor_area, faccao = "#3498DB", "TCP"
+                        elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: 
+                            cor_area, faccao = "#F39C12", "MILÍCIA"
+                        elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca:
+                            cor_area, faccao = "#27AE60", "ADA"
+                        else: 
+                            cor_area, faccao = "#95A5A6", "N/I"
                             
-                            if "POLYGON" in wkt_str.upper():
-                                # Inteligência de Cores
-                                faccao = str(row_poly[col_faccao]).upper().strip() if col_faccao else ""
-                                if "CV" in faccao: cor_area = "#E74C3C"      
-                                elif "TCP" in faccao: cor_area = "#3498DB"   
-                                elif "MILICIA" in faccao or "MILÍCIA" in faccao: cor_area = "#F39C12" 
-                                else: cor_area = "#95A5A6"                   
+                        # 2. Varredura Geométrica (Traduz Google para Folium)
+                        polygons = placemark.findall('.//Polygon')
+                        for poly in polygons:
+                            coords_node = poly.find('.//coordinates')
+                            if coords_node is not None and coords_node.text:
+                                coord_text = coords_node.text.strip()
+                                pontos_brutos = coord_text.split()
                                 
-                                nome_area = str(row_poly[col_nome]) if col_nome else "Área Restrita"
+                                coords_limpas = []
+                                # Otimizador Tático (Evita estouro de RAM em favelas enormes)
+                                passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
                                 
-                                # Extrator Avançado: Capaz de ler Polígonos isolados ou fragmentados (MultiPolygon)
-                                rings = re.findall(r'\(([^()]+)\)', wkt_str)
-                                for ring in rings:
-                                    pares_coords = ring.split(',')
-                                    coords = []
-                                    passo = 4 if len(pares_coords) > 1000 else (2 if len(pares_coords) > 300 else 1)
-                                    
-                                    for par in pares_coords[::passo]:
-                                        numeros = par.strip().split()
-                                        if len(numeros) >= 2:
-                                            try:
-                                                lon = float(numeros[0])
-                                                lat = float(numeros[1])
-                                                coords.append([lat, lon]) # Folium exige Latitude primeiro
-                                            except: continue
-                                    
-                                    # Renderização Padrão Google My Maps
-                                    if len(coords) >= 3:
-                                        folium.Polygon(
-                                            locations=coords,
-                                            color=cor_area, 
-                                            weight=1.5, 
-                                            opacity=0.8, 
-                                            fill=True, 
-                                            fill_color=cor_area, 
-                                            fill_opacity=0.15,
-                                            tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>"
-                                        ).add_to(camada_areas)
-                        
-                        camada_areas.add_to(m)
+                                for pt in pontos_brutos[::passo]:
+                                    valores = pt.split(',')
+                                    if len(valores) >= 2:
+                                        try:
+                                            # Google usa (Longitude, Latitude). Folium usa (Latitude, Longitude)
+                                            lon = float(valores[0])
+                                            lat = float(valores[1])
+                                            coords_limpas.append([lat, lon]) 
+                                        except: pass
+                                
+                                if len(coords_limpas) >= 3:
+                                    folium.Polygon(
+                                        locations=coords_limpas,
+                                        color=cor_area, 
+                                        weight=1.5, 
+                                        opacity=0.8, 
+                                        fill=True, 
+                                        fill_color=cor_area, 
+                                        fill_opacity=0.15,
+                                        tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>"
+                                    ).add_to(camada_areas)
+                    
+                    camada_areas.add_to(m)
+                else:
+                    st.warning("⚠️ O KMZ foi aberto com sucesso, mas não contém áreas geográficas mapeadas.")
+
+            except FileNotFoundError:
+                st.error("⚠️ ALERTA: O arquivo 'AREAS_SENSIVEIS_1_1999.kmz' não foi encontrado. Coloque-o na mesma pasta do código.")
             except Exception as e:
-                st.error(f"Erro tático nas áreas: {e}")
+                st.error(f"⚠️ Erro ao decodificar KMZ: {e}")
             # =======================================================
 
             folium.LayerControl().add_to(m)
