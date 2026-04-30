@@ -194,7 +194,6 @@ def pagina_mapa():
     with st.spinner("📡 Processando base de dados central..."):
         df = carregar_dados()
         
-    # Correção do buscador de colunas para ser exato
     col_lat = next((c for c in df.columns if "LATITUDE" in c.upper() or c.upper() == "LAT"), None)
     col_lon = next((c for c in df.columns if "LONGITUDE" in c.upper() or c.upper() in ["LON", "LONG"]), None)
 
@@ -206,61 +205,58 @@ def pagina_mapa():
         df_mapa[col_lon] = df_lon_limpa
         df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
         
-        # Trava de Segurança de Memória
         total_pontos = len(df_mapa)
         limite = 1000
         if total_pontos > limite:
-            st.warning(f"⚠️ Base massiva identificada ({total_pontos} pontos). Exibindo os {limite} mais recentes para garantir velocidade do painel.")
+            st.warning(f"⚠️ Base massiva. Exibindo os {limite} crimes mais recentes para estabilidade.")
             df_mapa = df_mapa.tail(limite)
         else:
-            st.success(f"✅ {total_pontos} pontos localizados.")
+            st.success(f"✅ {total_pontos} pontos de ocorrência localizados.")
 
-        with st.spinner("🗺️ Renderizando motor satelital com áreas táticas..."):
+        with st.spinner("🗺️ Renderizando motor satelital e inteligência tática..."):
             m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
             
-            # --- O "DISFARCE" DO GOOGLE MAPS ---
-            # Camada 1: O visual clássico de ruas do Google (igual ao link que você mandou)
-            folium.TileLayer(
-                tiles='http://mt0.google.com/vt/lyrs=m&hl=pt-BR&x={x}&y={y}&z={z}', 
-                attr='Google', 
-                name='Google Maps (Padrão)'
-            ).add_to(m)
-            
-            # Camada 2: Satélite Híbrido 
-            folium.TileLayer(
-                tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', 
-                attr='Google', 
-                name='Satélite Híbrido'
-            ).add_to(m)
-            
+            # --- PELE DO GOOGLE MAPS ---
+            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=m&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Google Maps (Ruas)').add_to(m)
+            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
             Draw(export=False, position='topleft').add_to(m)
 
             # =======================================================
-            # 🛡️ MOTOR TÁTICO: CAMADA DE POLÍGONOS (ÁREAS SENSÍVEIS)
+            # 🔴 1. MOTOR DE CRIMES (MARKER CLUSTER)
+            # =======================================================
+            col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
+            col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
+            col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
+            col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
+            col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
+
+            mc = MarkerCluster(name="🔴 Ocorrências (Crimes)").add_to(m)
+            for _, row in df_mapa.iterrows():
+                html_popup = f"<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"
+                folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
+
+            # =======================================================
+            # 🔲 2. MOTOR TÁTICO: CAMADA DE POLÍGONOS BLINDADA
             # =======================================================
             try:
-                # 1. Carrega o CSV forçando a leitura de qualquer separador
                 df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", sep=None, engine='python', on_bad_lines='skip')
+                camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
                 
-                camada_areas = folium.FeatureGroup(name="🔲 Territórios (Mancha Criminal)")
-                
-                # 2. Busca o nome exato das colunas (blindagem contra espaços)
                 col_wkt = next((c for c in df_poly.columns if "WKT" in c.upper()), None)
                 col_faccao = next((c for c in df_poly.columns if "FAC" in c.upper() or "DESCRI" in c.upper()), None)
                 col_nome = next((c for c in df_poly.columns if "NOME" in c.upper() or "AREA" in c.upper() or "ÁREA" in c.upper()), None)
 
                 if col_wkt:
-                    # 3. Trava de Segurança: Remove linhas vazias e limita a 100 áreas primeiro
                     df_poly_seguro = df_poly.dropna(subset=[col_wkt]).head(100)
-                    
                     if len(df_poly_seguro) > 0:
-                        st.info(f"📍 Mapeando {len(df_poly_seguro)} territórios estratégicos. Otimizando malha...")
+                        st.info(f"📍 Analisando e cruzando {len(df_poly_seguro)} territórios com dados criminais...")
+                        import re
                         
                         for _, row_poly in df_poly_seguro.iterrows():
                             wkt_str = str(row_poly[col_wkt])
                             
                             if "POLYGON" in wkt_str.upper():
-                                # Identificação Visual
+                                # Inteligência de Cores
                                 faccao = str(row_poly[col_faccao]).upper().strip() if col_faccao else ""
                                 if "CV" in faccao: cor_area = "#E74C3C"      
                                 elif "TCP" in faccao: cor_area = "#3498DB"   
@@ -269,43 +265,44 @@ def pagina_mapa():
                                 
                                 nome_area = str(row_poly[col_nome]) if col_nome else "Área Restrita"
                                 
-                                # Extração Matemática
-                                import re
-                                pontos = re.findall(r'(-?\d+\.\d+)\s+(-?\d+\.\d+)', wkt_str)
-                                
-                                # 4. Redutor Tático de Vértices (O Segredo para não travar)
-                                # Se a área tiver mais de 300 pontos, ele pega 1 a cada 3 pontos.
-                                passo = 4 if len(pontos) > 1000 else (2 if len(pontos) > 300 else 1)
-                                coords = [[float(lat), float(lon)] for lon, lat in pontos[::passo]]
-                                
-                                if coords:
-                                    folium.Polygon(
-                                        locations=coords,
-                                        color=cor_area,
-                                        weight=1.5,          # Borda mais fina e elegante
-                                        opacity=0.8,         # Transparência suave apenas na borda
-                                        fill=True,
-                                        fill_color=cor_area,
-                                        fill_opacity=0.15,   # Preenchimento translúcido (não esconde o fundo)
-                                        tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
-                                    ).add_to(camada_areas)
+                                # Extrator Avançado: Capaz de ler Polígonos isolados ou fragmentados (MultiPolygon)
+                                rings = re.findall(r'\(([^()]+)\)', wkt_str)
+                                for ring in rings:
+                                    pares_coords = ring.split(',')
+                                    coords = []
+                                    passo = 4 if len(pares_coords) > 1000 else (2 if len(pares_coords) > 300 else 1)
+                                    
+                                    for par in pares_coords[::passo]:
+                                        numeros = par.strip().split()
+                                        if len(numeros) >= 2:
+                                            try:
+                                                lon = float(numeros[0])
+                                                lat = float(numeros[1])
+                                                coords.append([lat, lon]) # Folium exige Latitude primeiro
+                                            except: continue
+                                    
+                                    # Renderização Padrão Google My Maps
+                                    if len(coords) >= 3:
+                                        folium.Polygon(
+                                            locations=coords,
+                                            color=cor_area, 
+                                            weight=1.5, 
+                                            opacity=0.8, 
+                                            fill=True, 
+                                            fill_color=cor_area, 
+                                            fill_opacity=0.15,
+                                            tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>"
+                                        ).add_to(camada_areas)
                         
                         camada_areas.add_to(m)
-                    else:
-                        st.warning("⚠️ O arquivo foi lido, mas nenhuma coordenada válida (WKT) foi encontrada.")
-                else:
-                    st.warning("⚠️ Coluna 'WKT' não encontrada na planilha. Verifique o cabeçalho.")
-
-            except FileNotFoundError:
-                st.error("⚠️ ALERTA: O arquivo 'MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv' não foi encontrado. Ele está na mesma pasta do código?")
             except Exception as e:
-                st.error(f"⚠️ Erro Crítico ao processar as áreas: {e}")
+                st.error(f"Erro tático nas áreas: {e}")
             # =======================================================
 
             folium.LayerControl().add_to(m)
             st_folium(m, width=1200, height=600, returned_objects=[])
-    else: 
-        st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+            
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
         
 # =====================================================================
 # 3. INTERFACE DE ACESSO
