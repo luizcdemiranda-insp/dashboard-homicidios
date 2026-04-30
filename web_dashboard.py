@@ -215,22 +215,25 @@ def pagina_mapa():
         else:
             st.success(f"✅ {total_pontos} pontos localizados.")
 
-        with st.spinner("🗺️ Renderizando motor satelital folium com áreas táticas..."):
+        with st.spinner("🗺️ Renderizando motor satelital com áreas táticas..."):
             m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
-            folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
-            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
+            
+            # --- O "DISFARCE" DO GOOGLE MAPS ---
+            # Camada 1: O visual clássico de ruas do Google (igual ao link que você mandou)
+            folium.TileLayer(
+                tiles='http://mt0.google.com/vt/lyrs=m&hl=pt-BR&x={x}&y={y}&z={z}', 
+                attr='Google', 
+                name='Google Maps (Padrão)'
+            ).add_to(m)
+            
+            # Camada 2: Satélite Híbrido 
+            folium.TileLayer(
+                tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', 
+                attr='Google', 
+                name='Satélite Híbrido'
+            ).add_to(m)
+            
             Draw(export=False, position='topleft').add_to(m)
-
-            col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
-            col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
-            col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
-            col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
-            col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
-
-            mc = MarkerCluster(name="Ocorrências Mapeadas").add_to(m)
-            for _, row in df_mapa.iterrows():
-                html_popup = f"""<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"""
-                folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
 
             # =======================================================
             # 🛡️ MOTOR TÁTICO: CAMADA DE POLÍGONOS (ÁREAS SENSÍVEIS)
@@ -279,10 +282,11 @@ def pagina_mapa():
                                     folium.Polygon(
                                         locations=coords,
                                         color=cor_area,
-                                        weight=2,
+                                        weight=1.5,          # Borda mais fina e elegante
+                                        opacity=0.8,         # Transparência suave apenas na borda
                                         fill=True,
                                         fill_color=cor_area,
-                                        fill_opacity=0.3,
+                                        fill_opacity=0.15,   # Preenchimento translúcido (não esconde o fundo)
                                         tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
                                     ).add_to(camada_areas)
                         
