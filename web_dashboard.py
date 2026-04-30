@@ -236,58 +236,58 @@ def pagina_mapa():
     else: 
         st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
 
-            # --- FIM DO CÓDIGO DE CRIMES ANTERIOR ---
-            # for _, row in df_mapa.iterrows():
-            #     ... código do Marker ...
-            #     folium.Marker(...).add_to(mc)
+# --- FIM DO CÓDIGO DE CRIMES ANTERIOR ---
+# for _, row in df_mapa.iterrows():
+#     ... código do Marker ...
+#     folium.Marker(...).add_to(mc)
 
-            # =======================================================
-            # 🛡️ MOTOR TÁTICO: CAMADA DE POLÍGONOS (ÁREAS SENSÍVEIS)
-            # =======================================================
-            try:
-                # Carrega o CSV de polígonos
-                df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", on_bad_lines='skip')
+# =======================================================
+# 🛡️ MOTOR TÁTICO: CAMADA DE POLÍGONOS (ÁREAS SENSÍVEIS)
+# =======================================================
+try:
+    # Carrega o CSV de polígonos
+    df_poly = pd.read_csv("MANCHA CRIMINAL DHBF 2026- AREAS_SENSIVEIS_1_1999.csv", on_bad_lines='skip')
                 
-                # Cria uma camada separada que o usuário pode ligar/desligar no mapa
-                camada_areas = folium.FeatureGroup(name="🔲 Territórios (Mancha Criminal)")
+    # Cria uma camada separada que o usuário pode ligar/desligar no mapa
+    camada_areas = folium.FeatureGroup(name="🔲 Territórios (Mancha Criminal)")
                 
-                for _, row_poly in df_poly.iterrows():
-                    wkt_str = str(row_poly.get('WKT', ''))
+    for _, row_poly in df_poly.iterrows():
+        wkt_str = str(row_poly.get('WKT', ''))
                     
-                    if "POLYGON" in wkt_str.upper():
-                        # Inteligência Visual: Cores por Facção
-                        faccao = str(row_poly.get('Facção', '')).upper().strip()
-                        if "CV" in faccao: cor_area = "#E74C3C"      # Vermelho
-                        elif "TCP" in faccao: cor_area = "#3498DB"   # Azul
-                        elif "MILICIA" in faccao or "MILÍCIA" in faccao: cor_area = "#F39C12" # Laranja
-                        else: cor_area = "#95A5A6"                   # Cinza
+        if "POLYGON" in wkt_str.upper():
+            # Inteligência Visual: Cores por Facção
+            faccao = str(row_poly.get('Facção', '')).upper().strip()
+            if "CV" in faccao: cor_area = "#E74C3C"      # Vermelho
+            elif "TCP" in faccao: cor_area = "#3498DB"   # Azul
+            elif "MILICIA" in faccao or "MILÍCIA" in faccao: cor_area = "#F39C12" # Laranja
+            else: cor_area = "#95A5A6"                   # Cinza
                         
-                        nome_area = str(row_poly.get('Nome', 'Área Sensível'))
+            nome_area = str(row_poly.get('Nome', 'Área Sensível'))
                         
-                        # Decodificador Tático de Coordenadas
-                        import re
-                        pontos = re.findall(r'(-?\d+\.\d+)\s+(-?\d+\.\d+)', wkt_str)
-                        coords = [[float(lat), float(lon)] for lon, lat in pontos]
+            # Decodificador Tático de Coordenadas
+            import re
+            pontos = re.findall(r'(-?\d+\.\d+)\s+(-?\d+\.\d+)', wkt_str)
+            coords = [[float(lat), float(lon)] for lon, lat in pontos]
                         
-                        if coords:
-                            folium.Polygon(
-                                locations=coords,
-                                color=cor_area,
-                                weight=2,
-                                fill=True,
-                                fill_color=cor_area,
-                                fill_opacity=0.3,
-                                tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
-                            ).add_to(camada_areas)
+            if coords:
+                folium.Polygon(
+                    locations=coords,
+                    color=cor_area,
+                    weight=2,
+                    fill=True,
+                    fill_color=cor_area,
+                    fill_opacity=0.3,
+                    tooltip=f"<div style='font-family:sans-serif;'><b>{nome_area}</b><br>Domínio: {faccao}</div>"
+                ).add_to(camada_areas)
                 
-                # Adiciona a nova camada ao mapa
-                camada_areas.add_to(m)
-            except Exception as e:
-                pass # Em caso de falha de leitura, o sistema passa direto sem quebrar o mapa
-            # =======================================================
+    # Adiciona a nova camada ao mapa
+    camada_areas.add_to(m)
+except Exception as e:
+    pass # Em caso de falha de leitura, o sistema passa direto sem quebrar o mapa
+# =======================================================
 
-            folium.LayerControl().add_to(m)
-            st_folium(m, width=1200, height=600, returned_objects=[])
+folium.LayerControl().add_to(m)
+st_folium(m, width=1200, height=600, returned_objects=[])
         
 # =====================================================================
 # 3. INTERFACE DE ACESSO
