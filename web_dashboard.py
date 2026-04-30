@@ -13,6 +13,8 @@ from streamlit_folium import st_folium
 from folium.plugins import Draw, MarkerCluster
 import time
 from io import StringIO
+import xml.etree.ElementTree as ET
+import re
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -188,6 +190,16 @@ def carregar_dados_notion():
 # =====================================================================
 # 2.6 GEOPROCESSAMENTO E MAPA 
 # =====================================================================
+@st.cache_data(ttl=3600)
+def carregar_kml_github(url):
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            return response.text
+        return None
+    except Exception as e:
+        return None
+
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
     
@@ -236,104 +248,100 @@ def pagina_mapa():
                 folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
 
             # =======================================================
-            # 🔲 2. MOTOR TÁTICO: DECODIFICADOR KMZ NATIVO (BLINDADO)
+            # 🔲 2. MOTOR TÁTICO: DECODIFICADOR KML GITHUB (BLINDADO)
             # =======================================================
             try:
-                import zipfile
-                import xml.etree.ElementTree as ET
-                import re
-
                 camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
-                arquivo_kmz = "AREAS_SENSIVEIS_1_1999.kmz"
                 
-                # Descompacta e extrai o texto bruto do KMZ
-                with zipfile.ZipFile(arquivo_kmz, 'r') as kmz:
-                    kml_nome = [n for n in kmz.namelist() if n.endswith('.kml')][0]
-                    with kmz.open(kml_nome, 'r') as kml_file:
-                        xml_texto = kml_file.read().decode('utf-8', errors='ignore')
+                # Cole AQUI o link RAW do seu arquivo KML no GitHub
+                # Exemplo: "https://raw.githubusercontent.com/SeuUsuario/SeuRepo/main/AREAS_SENSIVEIS_1_1999.kml"
+                url_kml_github = "COLE_AQUI_O_LINK_RAW_DO_GITHUB"
                 
-                # A MÁGICA: "Lavagem Ácida" para destruir o escudo de Namespaces do Google
-                xml_texto = re.sub(r'\sxmlns="[^"]+"', '', xml_texto)
-                xml_texto = re.sub(r'\sxmlns:\w+="[^"]+"', '', xml_texto)
+                xml_texto = carregar_kml_github(url_kml_github)
                 
-                # Agora o Python consegue ler a estrutura perfeitamente
-                root = ET.fromstring(xml_texto)
-                placemarks = root.findall('.//Placemark')
-                
-                if placemarks:
-                    st.info(f"📍 Decodificando {len(placemarks)} territórios protegidos do arquivo KMZ...")
+                if xml_texto:
+                    # A MÁGICA: "Lavagem Ácida" para destruir o escudo de Namespaces do Google
+                    xml_texto = re.sub(r'\sxmlns="[^"]+"', '', xml_texto)
+                    xml_texto = re.sub(r'\sxmlns:\w+="[^"]+"', '', xml_texto)
                     
-                    for placemark in placemarks:
-                        # 1. Busca de Nomes e Atributos Ocultos (o .// busca em qualquer profundidade)
-                        nome_node = placemark.find('.//name')
-                        nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
+                    # Agora o Python consegue ler a estrutura perfeitamente
+                    root = ET.fromstring(xml_texto)
+                    placemarks = root.findall('.//Placemark')
+                    
+                    if placemarks:
+                        st.info(f"📍 Decodificando {len(placemarks)} territórios protegidos sincronizados via GitHub...")
                         
-                        desc_node = placemark.find('.//description')
-                        desc_text = desc_node.text if desc_node is not None and desc_node.text else ""
-                        
-                        ext_node = placemark.find('.//ExtendedData')
-                        ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
-                        
-                        # Inteligência de Cores
-                        texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
-                        if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: 
-                            cor_area, faccao = "#E74C3C", "CV"
-                        elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: 
-                            cor_area, faccao = "#3498DB", "TCP"
-                        elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: 
-                            cor_area, faccao = "#F39C12", "MILÍCIA"
-                        elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca:
-                            cor_area, faccao = "#27AE60", "ADA"
-                        else: 
-                            cor_area, faccao = "#95A5A6", "N/I"
+                        for placemark in placemarks:
+                            # 1. Busca de Nomes e Atributos Ocultos (o .// busca em qualquer profundidade)
+                            nome_node = placemark.find('.//name')
+                            nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
                             
-                        # 2. Varredura Geométrica (Traduz Google para Folium)
-                        polygons = placemark.findall('.//Polygon')
-                        for poly in polygons:
-                            coords_node = poly.find('.//coordinates')
-                            if coords_node is not None and coords_node.text:
-                                coord_text = coords_node.text.strip()
-                                pontos_brutos = coord_text.split()
+                            desc_node = placemark.find('.//description')
+                            desc_text = desc_node.text if desc_node is not None and desc_node.text else ""
+                            
+                            ext_node = placemark.find('.//ExtendedData')
+                            ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
+                            
+                            # Inteligência de Cores
+                            texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
+                            if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: 
+                                cor_area, faccao = "#E74C3C", "CV"
+                            elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: 
+                                cor_area, faccao = "#3498DB", "TCP"
+                            elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: 
+                                cor_area, faccao = "#F39C12", "MILÍCIA"
+                            elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca:
+                                cor_area, faccao = "#27AE60", "ADA"
+                            else: 
+                                cor_area, faccao = "#95A5A6", "N/I"
                                 
-                                coords_limpas = []
-                                # Otimizador Tático para não explodir a memória do navegador
-                                passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
-                                
-                                for pt in pontos_brutos[::passo]:
-                                    valores = pt.split(',')
-                                    if len(valores) >= 2:
-                                        try:
-                                            lon = float(valores[0].strip())
-                                            lat = float(valores[1].strip())
-                                            coords_limpas.append([lat, lon]) 
-                                        except: pass
-                                
-                                if len(coords_limpas) >= 3:
-                                    folium.Polygon(
-                                        locations=coords_limpas,
-                                        color=cor_area, 
-                                        weight=1.5, 
-                                        opacity=0.8, 
-                                        fill=True, 
-                                        fill_color=cor_area, 
-                                        fill_opacity=0.15,
-                                        tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>"
-                                    ).add_to(camada_areas)
-                    
-                    camada_areas.add_to(m)
+                            # 2. Varredura Geométrica (Traduz Google para Folium)
+                            polygons = placemark.findall('.//Polygon')
+                            for poly in polygons:
+                                coords_node = poly.find('.//coordinates')
+                                if coords_node is not None and coords_node.text:
+                                    coord_text = coords_node.text.strip()
+                                    pontos_brutos = coord_text.split()
+                                    
+                                    coords_limpas = []
+                                    # Otimizador Tático para não explodir a memória do navegador
+                                    passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
+                                    
+                                    for pt in pontos_brutos[::passo]:
+                                        valores = pt.split(',')
+                                        if len(valores) >= 2:
+                                            try:
+                                                lon = float(valores[0].strip())
+                                                lat = float(valores[1].strip())
+                                                coords_limpas.append([lat, lon]) 
+                                            except: pass
+                                    
+                                    if len(coords_limpas) >= 3:
+                                        folium.Polygon(
+                                            locations=coords_limpas,
+                                            color=cor_area, 
+                                            weight=1.5, 
+                                            opacity=0.8, 
+                                            fill=True, 
+                                            fill_color=cor_area, 
+                                            fill_opacity=0.15,
+                                            tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>"
+                                        ).add_to(camada_areas)
+                        
+                        camada_areas.add_to(m)
+                    else:
+                        st.warning("⚠️ O KML foi baixado com sucesso, mas não foram encontrados polígonos.")
                 else:
-                    st.warning("⚠️ O KMZ foi aberto, a lavagem ácida foi feita, mas não foram encontrados polígonos.")
+                    st.error("⚠️ ALERTA: Não foi possível baixar o arquivo KML do GitHub. Verifique se o link 'Raw' está correto e público.")
 
-            except FileNotFoundError:
-                st.error("⚠️ ALERTA: O arquivo 'AREAS_SENSIVEIS_1_1999.kmz' não foi encontrado. Coloque-o na mesma pasta do código.")
             except Exception as e:
-                st.error(f"⚠️ Erro ao decodificar KMZ: {e}")
+                st.error(f"⚠️ Erro ao decodificar KML remoto: {e}")
             # =======================================================
 
             folium.LayerControl().add_to(m)
             st_folium(m, width=1200, height=600, returned_objects=[])
             
-    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas na base central.")
         
 # =====================================================================
 # 3. INTERFACE DE ACESSO
