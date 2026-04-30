@@ -102,7 +102,6 @@ def carregar_dados_notion():
         tem_mais = True
         cursor = None
         
-        # Loop de Paginação: Varre o banco de dados rompendo o limite de 100
         while tem_mais:
             payload = {}
             if cursor:
@@ -114,8 +113,6 @@ def carregar_dados_notion():
                 
             json_data = response.json()
             dados_brutos.extend(json_data.get("results", []))
-            
-            # Checa se o Notion tem mais páginas a fornecer
             tem_mais = json_data.get("has_more", False)
             cursor = json_data.get("next_cursor", None)
             
@@ -143,17 +140,14 @@ def carregar_dados_notion():
                     linha[nome_coluna] = val.get("start") if val else ""
                 elif tipo == "checkbox": linha[nome_coluna] = dados_coluna.get("checkbox")
                 
-                # --- AJUSTE PARA LER RELAÇÕES (CUIDADO: RETORNA IDs E NÃO TEXTOS) ---
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
                     if relacoes:
-                        # Extrai o ID da relação, pois o Notion não envia o nome aqui
                         ids_relacionados = [r.get("id")[:8] for r in relacoes]
                         linha[nome_coluna] = f"ID: {', '.join(ids_relacionados)}..."
                     else:
                         linha[nome_coluna] = ""
                 
-                # --- CHAVE MESTRA: EXTRATOR UNIVERSAL DE ROLLUP ---
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
                     r_type = rollup.get("type")
@@ -175,7 +169,6 @@ def carregar_dados_notion():
                     else:
                         linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
                 
-                # --- EXTRATOR DE FÓRMULAS ---
                 elif tipo == "formula":
                     form = dados_coluna.get("formula", {})
                     f_type = form.get("type")
@@ -198,32 +191,31 @@ def carregar_dados_notion():
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
     
-    with st.spinner("📡 Baixando coordenadas da base central..."):
+    with st.spinner("📡 Processando base de dados central..."):
         df = carregar_dados()
         
-    col_lat = next((c for c in df.columns if "LAT" in c.upper()), None)
-    col_lon = next((c for c in df.columns if "LON" in c.upper()), None)
+    # Correção do buscador de colunas para ser exato
+    col_lat = next((c for c in df.columns if "LATITUDE" in c.upper() or c.upper() == "LAT"), None)
+    col_lon = next((c for c in df.columns if "LONGITUDE" in c.upper() or c.upper() in ["LON", "LONG"]), None)
 
     if col_lat and col_lon:
-        with st.spinner("⚙️ Limpando e processando dados geográficos..."):
-            df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
-            df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
-            df_mapa = df.copy()
-            df_mapa[col_lat] = df_lat_limpa
-            df_mapa[col_lon] = df_lon_limpa
-            df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
-            
-            total_pontos = len(df_mapa)
-            
-            # --- TRAVA DE SEGURANÇA CONTRA CONGELAMENTO DE TELA ---
-            limite_tatico = 1000
-            if total_pontos > limite_tatico:
-                st.warning(f"⚠️ Base massiva detectada ({total_pontos} registros). Plotando as {limite_tatico} ocorrências mais recentes para estabilizar o navegador.")
-                df_mapa = df_mapa.tail(limite_tatico)
-            else:
-                st.success(f"✅ {total_pontos} pontos prontos para plotagem.")
+        df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
+        df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
+        df_mapa = df.copy()
+        df_mapa[col_lat] = df_lat_limpa
+        df_mapa[col_lon] = df_lon_limpa
+        df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
+        
+        # Trava de Segurança de Memória
+        total_pontos = len(df_mapa)
+        limite = 1000
+        if total_pontos > limite:
+            st.warning(f"⚠️ Base massiva identificada ({total_pontos} pontos). Exibindo os {limite} mais recentes para garantir velocidade do painel.")
+            df_mapa = df_mapa.tail(limite)
+        else:
+            st.success(f"✅ {total_pontos} pontos localizados.")
 
-        with st.spinner("🗺️ Renderizando satélite e inserindo alvos (isso pode levar alguns segundos)..."):
+        with st.spinner("🗺️ Renderizando motor satelital folium..."):
             m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
             folium.TileLayer('openstreetmap', name='Mapa de Ruas').add_to(m)
             folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
@@ -239,11 +231,10 @@ def pagina_mapa():
             for _, row in df_mapa.iterrows():
                 html_popup = f"""<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"""
                 folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
-            
             folium.LayerControl().add_to(m)
             st_folium(m, width=1200, height=600, returned_objects=[])
-            
-    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas na base do Google Sheets.")
+    else: 
+        st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
 
 # =====================================================================
 # 3. INTERFACE DE ACESSO
@@ -395,7 +386,7 @@ else:
     menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
 
     sub_menu_orcrim = None
-    if menu == "2. ORCRIM":
+    if "ORCRIM" in menu:
         st.sidebar.markdown("---")
         st.sidebar.markdown("📂 **SELECIONE A ÁREA:**")
         sub_menu_orcrim = st.sidebar.radio("Areas", ["ÁREA 1", "ÁREA 2", "ÁREA 3", "ÁREA 4"], label_visibility="collapsed")
@@ -405,7 +396,7 @@ else:
         st.rerun()
 
     # =====================================================================
-    # CABEÇALHO - SISTEMA MERCÚRIO (Blindagem Mobile)
+    # CABEÇALHO - SISTEMA MERCÚRIO
     # =====================================================================
     col_logos, col_titulo = st.columns([1.5, 4])
     
@@ -431,7 +422,8 @@ else:
     
     df = carregar_dados()
 
-    if menu == "1. VISÃO GERAL":
+    # MOTOR DE NAVEGAÇÃO BLINDADO (Utilizando radar 'in')
+    if "VISÃO" in menu:
         st.header("📊 VISÃO GERAL")
         
         try:
@@ -475,7 +467,7 @@ else:
             else: gerar_dashboard(df_filtrado) 
         else: st.warning("⚠️ Selecione pelo menos um ano.")
 
-    elif menu == "2. ORCRIM":
+    elif "ORCRIM" in menu:
         area_selecionada = str(sub_menu_orcrim)
         if area_selecionada == "ÁREA 1":
             st.header("📓 ÁREA 1 - INTELIGÊNCIA")
@@ -542,41 +534,23 @@ else:
                             
                             def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
 
-                            # --- CÉREBRO HIERÁRQUICO (4 NÍVEIS RIGOROSOS) ---
                             def get_nivel(funcao):
                                 f_up = str(funcao).upper()
-                                
-                                if "DONO" in f_up: 
-                                    return 1, "DONO"
-                                elif "FRENTE" in f_up: 
-                                    return 2, "FRENTE"
-                                elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: 
-                                    return 3, "GERÊNCIA / LIDERANÇA"
-                                else: 
-                                    return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
+                                if "DONO" in f_up: return 1, "DONO"
+                                elif "FRENTE" in f_up: return 2, "FRENTE"
+                                elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
+                                else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
                             
                             orgs = df_area["Organização"].dropna().unique().tolist()
                             
-                            html_organograma = ""
-                            html_organograma += f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'>"
-                            html_organograma += f"<h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2>"
-                            html_organograma += "</div>"
+                            html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
                             
                             for org in orgs:
                                 org_cl = clean_text(org)
                                 if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                                 
-                                html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'>"
-                                html_organograma += f"<h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
-
-                                html_organograma += "<style>"
-                                html_organograma += ".tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }"
-                                html_organograma += ".tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }"
-                                html_organograma += ".tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }"
-                                html_organograma += ".tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }"
-                                html_organograma += ".tatico-card img { transition: all 0.3s ease; }"
-                                html_organograma += ".tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }"
-                                html_organograma += "</style>"
+                                html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
+                                html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }.tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
 
                                 df_org = df_area[df_area["Organização"] == org]
                                 ranks = {}
@@ -594,44 +568,21 @@ else:
 
                                 for rank_idx in sorted(ranks.keys()):
                                     nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                    
-                                    html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div>"
-                                    
-                                    html_organograma += "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
+                                    html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
                                     
                                     for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
-                                        if p_nome == clean_text(alvo_selecionado):
-                                            bg_color = "#E74C3C"
-                                            b_color = "#ffffff"
-                                        else:
-                                            bg_color = "#4a4f63"
-                                            b_color = "#333333"
-                                            
-                                        img_html = ""
-                                        if str(p_foto).startswith("http"):
-                                            img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>"
-                                            
-                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>"
-                                        html_organograma += f"{img_html}"
-                                        html_organograma += f"<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
+                                        bg_color, b_color = ("#E74C3C", "#ffffff") if p_nome == clean_text(alvo_selecionado) else ("#4a4f63", "#333333")
+                                        img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>" if str(p_foto).startswith("http") else ""
                                         
-                                        if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]:
-                                            html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
-                                            
-                                        html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
-                                        html_organograma += f"<div class='info-oculta'>"
-                                        html_organograma += f"<div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div>"
-                                        html_organograma += f"</div></div>"
+                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
+                                        if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
+                                        html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div><div class='info-oculta'><div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div></div></div>"
                                         
                                     html_organograma += "</div>"
                                 html_organograma += "</div>"
-                                
                             st.markdown(html_organograma, unsafe_allow_html=True)
-
-                        else:
-                            st.warning("O alvo não possui um território cadastrado para mapeamento.")
-                    else:
-                        st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
+                        else: st.warning("O alvo não possui um território cadastrado para mapeamento.")
+                    else: st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
 
                 with aba_tabela:
                     ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
@@ -662,7 +613,28 @@ else:
                     for c in df_filt.columns:
                         if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
                         elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
-
                     st.dataframe(df_filt, column_config=cfg, use_container_width=True)
-            else:
-                st.warning("Sem dados.")
+            else: st.warning("Sem dados.")
+        else: st.info(f"O painel da {area_selecionada} está em estruturação.")
+
+    elif "MAPA" in menu:
+        pagina_mapa()
+
+    elif "ANALÍTICO" in menu:
+        st.header("📑 MODO ANALÍTICO")
+        st.dataframe(df)
+
+    elif "ASSISTENTE" in menu:
+        st.header("🤖 Analista Criminal Virtual")
+        api_key = st.sidebar.text_input("🔑 Chave Gemini:", type="password")
+        if api_key:
+            try:
+                genai.configure(api_key=api_key)
+                st.success("Sistemas prontos.")
+            except:
+                st.error("Erro na chave.")
+
+    elif "CONFIGURAÇÕES" in menu:
+        st.header("⚙️ Administrador")
+        try: st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
+        except: st.error("Erro ao carregar usuários.")
