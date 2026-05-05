@@ -573,34 +573,30 @@ else:
                 df_notion = carregar_dados_notion()
                 
             if not df_notion.empty:
-                # O st.toast faz a mensagem aparecer flutuando no canto da tela e sumir em poucos segundos
                 st.toast(f"✅ {len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
                 
-                # Controle de estado para os filtros em cascata
+                # Inicializa as chaves do session_state
                 if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
                 if "terr_busca" not in st.session_state: st.session_state.terr_busca = ""
+                
                 def limpar_buscas(): 
                     st.session_state.alvo_busca = ""
                     st.session_state.terr_busca = ""
 
                 col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
-                terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"])
+                
+                # Extrai listas globais e ordena alfabeticamente ignorando case para evitar erros com maiúsculas/minúsculas
+                terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
+                nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
 
-                # Lógica Cascata: Se escolheu território, filtra a lista de qualificados
-                if st.session_state.terr_busca:
-                    df_nomes_filtrado = df_notion[df_notion[col_territorio] == st.session_state.terr_busca]
-                else:
-                    df_nomes_filtrado = df_notion
-
-                nomes_disponiveis = sorted([str(x) for x in df_nomes_filtrado["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"])
-
-                # Trava de segurança para não gerar erro caso o alvo atual não pertença ao novo território selecionado
-                if st.session_state.alvo_busca and st.session_state.alvo_busca not in nomes_disponiveis:
-                    st.session_state.alvo_busca = ""
+                # Lógica de exclusividade (se um tem valor, o outro é bloqueado)
+                alvo_desativado = bool(st.session_state.terr_busca)
+                terr_desativado = bool(st.session_state.alvo_busca)
 
                 col_terr, col_busca, col_btn, _ = st.columns([3, 3, 1, 3])
-                terr_selecionado = col_terr.selectbox("Busca por território:", [""] + terr_disponiveis, key="terr_busca")
-                alvo_selecionado = col_busca.selectbox("Busca por qualificado:", [""] + nomes_disponiveis, key="alvo_busca")
+                
+                terr_selecionado = col_terr.selectbox("Busca por território:", [""] + terr_disponiveis, key="terr_busca", disabled=terr_desativado)
+                alvo_selecionado = col_busca.selectbox("Busca por qualificado:", [""] + nomes_disponiveis, key="alvo_busca", disabled=alvo_desativado)
                 
                 col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                 col_btn.button("🧹 Limpar", on_click=limpar_buscas)
@@ -638,7 +634,7 @@ else:
                 with aba_organograma:
                     atuacao_alvo = ""
                     
-                    # Se um alvo for selecionado, usa o território dele. Caso contrário, usa o território filtrado direto.
+                    # Identifica qual busca acionou o mapa
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
                         atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
