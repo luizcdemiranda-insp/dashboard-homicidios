@@ -254,17 +254,15 @@ def pagina_mapa():
                 camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
                 
                 # Cole AQUI o link RAW do seu arquivo KML no GitHub
-                # Exemplo: "https://raw.githubusercontent.com/SeuUsuario/SeuRepo/main/AREAS_SENSIVEIS_1_1999.kml"
-                url_kml_github = "https://raw.githubusercontent.com/luizcdemiranda-insp/dashboard-homicidios/refs/heads/main/AREAS_SENSIVEIS_1_1999.kml"
+                url_kml_github = "COLE_AQUI_O_LINK_RAW_DO_GITHUB"
                 
                 xml_texto = carregar_kml_github(url_kml_github)
                 
                 if xml_texto:
-                    # A MÁGICA: "Lavagem Ácida" para destruir o escudo de Namespaces do Google
+                    # Lavagem Ácida
                     xml_texto = re.sub(r'\sxmlns="[^"]+"', '', xml_texto)
                     xml_texto = re.sub(r'\sxmlns:\w+="[^"]+"', '', xml_texto)
                     
-                    # Agora o Python consegue ler a estrutura perfeitamente
                     root = ET.fromstring(xml_texto)
                     placemarks = root.findall('.//Placemark')
                     
@@ -272,7 +270,6 @@ def pagina_mapa():
                         st.info(f"📍 Decodificando {len(placemarks)} territórios protegidos sincronizados via GitHub...")
                         
                         for placemark in placemarks:
-                            # 1. Busca de Nomes e Atributos Ocultos (o .// busca em qualquer profundidade)
                             nome_node = placemark.find('.//name')
                             nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
                             
@@ -282,7 +279,6 @@ def pagina_mapa():
                             ext_node = placemark.find('.//ExtendedData')
                             ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
                             
-                            # Inteligência de Cores
                             texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
                             if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: 
                                 cor_area, faccao = "#E74C3C", "CV"
@@ -295,7 +291,6 @@ def pagina_mapa():
                             else: 
                                 cor_area, faccao = "#95A5A6", "N/I"
                                 
-                            # 2. Varredura Geométrica (Traduz Google para Folium)
                             polygons = placemark.findall('.//Polygon')
                             for poly in polygons:
                                 coords_node = poly.find('.//coordinates')
@@ -304,7 +299,6 @@ def pagina_mapa():
                                     pontos_brutos = coord_text.split()
                                     
                                     coords_limpas = []
-                                    # Otimizador Tático para não explodir a memória do navegador
                                     passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
                                     
                                     for pt in pontos_brutos[::passo]:
@@ -342,7 +336,7 @@ def pagina_mapa():
             st_folium(m, width=1200, height=600, returned_objects=[])
             
     else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas na base central.")
-        
+
 # =====================================================================
 # 3. INTERFACE DE ACESSO
 # =====================================================================
@@ -513,12 +507,10 @@ else:
             open("logo1.png")
             logos_ativos.append("logo1.png")
         except: pass
-        
         try: 
             open("logo2.png")
             logos_ativos.append("logo2.png")
         except: pass
-        
         if logos_ativos:
             st.image(logos_ativos, width=85)
             
@@ -529,10 +521,8 @@ else:
     
     df = carregar_dados()
 
-    # MOTOR DE NAVEGAÇÃO BLINDADO (Utilizando radar 'in')
     if "VISÃO" in menu:
         st.header("📊 VISÃO GERAL")
-        
         try:
             data_atualizacao = df.iloc[-1, 5] 
             st.markdown(f"""
@@ -577,24 +567,43 @@ else:
     elif "ORCRIM" in menu:
         area_selecionada = str(sub_menu_orcrim)
         if area_selecionada == "ÁREA 1":
-            st.header("📓 ÁREA 1 - INTELIGÊNCIA")
+            st.header("📓 ÁREA 1 - ORCIM")
             
             with st.spinner("Sincronizando Central..."):
                 df_notion = carregar_dados_notion()
                 
             if not df_notion.empty:
-                st.success(f"✅ {len(df_notion)} registros ativos no banco de dados.")
+                # O st.toast faz a mensagem aparecer flutuando no canto da tela e sumir em poucos segundos
+                st.toast(f"✅ {len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
                 
-                st.markdown("### 🎯 Busca Integrada de Alvos")
+                # Controle de estado para os filtros em cascata
                 if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
-                def limpar_alvo(): st.session_state.alvo_busca = ""
+                if "terr_busca" not in st.session_state: st.session_state.terr_busca = ""
+                def limpar_buscas(): 
+                    st.session_state.alvo_busca = ""
+                    st.session_state.terr_busca = ""
 
-                nomes_disponiveis = df_notion["Nome"].dropna().unique().tolist()
+                col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
+                terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"])
+
+                # Lógica Cascata: Se escolheu território, filtra a lista de qualificados
+                if st.session_state.terr_busca:
+                    df_nomes_filtrado = df_notion[df_notion[col_territorio] == st.session_state.terr_busca]
+                else:
+                    df_nomes_filtrado = df_notion
+
+                nomes_disponiveis = sorted([str(x) for x in df_nomes_filtrado["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"])
+
+                # Trava de segurança para não gerar erro caso o alvo atual não pertença ao novo território selecionado
+                if st.session_state.alvo_busca and st.session_state.alvo_busca not in nomes_disponiveis:
+                    st.session_state.alvo_busca = ""
+
+                col_terr, col_busca, col_btn, _ = st.columns([3, 3, 1, 3])
+                terr_selecionado = col_terr.selectbox("Busca por território:", [""] + terr_disponiveis, key="terr_busca")
+                alvo_selecionado = col_busca.selectbox("Busca por qualificado:", [""] + nomes_disponiveis, key="alvo_busca")
                 
-                col_busca, col_btn, _ = st.columns([3, 1, 6])
-                alvo_selecionado = col_busca.selectbox("Selecione o Alvo:", [""] + nomes_disponiveis, key="alvo_busca")
                 col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                col_btn.button("🧹 Limpar", on_click=limpar_alvo)
+                col_btn.button("🧹 Limpar", on_click=limpar_buscas)
                 
                 st.write("---")
                 
@@ -615,10 +624,7 @@ else:
                             st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
                             st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
                             st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            
-                            col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
                             st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
-                            
                             st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
                             st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
                             
@@ -627,69 +633,71 @@ else:
                             st.markdown("#### 📝 Informe Analítico")
                             st.warning(dados_alvo.get("Informe", ""))
                     else:
-                        st.info("Aguardando seleção de alvo no buscador acima.")
+                        st.info("Aguardando seleção de um qualificado no buscador acima.")
                 
                 with aba_organograma:
+                    atuacao_alvo = ""
+                    
+                    # Se um alvo for selecionado, usa o território dele. Caso contrário, usa o território filtrado direto.
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        
-                        col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
                         atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
+                    elif terr_selecionado:
+                        atuacao_alvo = str(terr_selecionado).strip()
 
-                        if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
-                            df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
-                            
-                            def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
+                    if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
+                        df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
+                        
+                        def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
 
-                            def get_nivel(funcao):
-                                f_up = str(funcao).upper()
-                                if "DONO" in f_up: return 1, "DONO"
-                                elif "FRENTE" in f_up: return 2, "FRENTE"
-                                elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
-                                else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
+                        def get_nivel(funcao):
+                            f_up = str(funcao).upper()
+                            if "DONO" in f_up: return 1, "DONO"
+                            elif "FRENTE" in f_up: return 2, "FRENTE"
+                            elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
+                            else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
+                        
+                        orgs = df_area["Organização"].dropna().unique().tolist()
+                        
+                        html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        
+                        for org in orgs:
+                            org_cl = clean_text(org)
+                            if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                             
-                            orgs = df_area["Organização"].dropna().unique().tolist()
-                            
-                            html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
-                            
-                            for org in orgs:
-                                org_cl = clean_text(org)
-                                if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
+                            html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
+                            html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }.tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
+
+                            df_org = df_area[df_area["Organização"] == org]
+                            ranks = {}
+                            for _, r in df_org.iterrows():
+                                func = clean_text(r.get("Função", ""))
+                                nome = clean_text(r.get("Nome", ""))
+                                foto = r.get("Foto", "")
+                                vulgo = clean_text(r.get("Vulgo", "N/I"))
+                                rg = clean_text(r.get("RG", "N/I"))
                                 
-                                html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
-                                html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }.tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
+                                if nome.upper() in ["NAN", "N/I", "", "-"]: continue
+                                idx, nome_nivel = get_nivel(func)
+                                if idx not in ranks: ranks[idx] = []
+                                ranks[idx].append((nome, func, foto, vulgo, rg)) 
 
-                                df_org = df_area[df_area["Organização"] == org]
-                                ranks = {}
-                                for _, r in df_org.iterrows():
-                                    func = clean_text(r.get("Função", ""))
-                                    nome = clean_text(r.get("Nome", ""))
-                                    foto = r.get("Foto", "")
-                                    vulgo = clean_text(r.get("Vulgo", "N/I"))
-                                    rg = clean_text(r.get("RG", "N/I"))
+                            for rank_idx in sorted(ranks.keys()):
+                                nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
+                                html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
+                                
+                                for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
+                                    bg_color, b_color = ("#E74C3C", "#ffffff") if p_nome == clean_text(alvo_selecionado) else ("#4a4f63", "#333333")
+                                    img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>" if str(p_foto).startswith("http") else ""
                                     
-                                    if nome.upper() in ["NAN", "N/I", "", "-"]: continue
-                                    idx, nome_nivel = get_nivel(func)
-                                    if idx not in ranks: ranks[idx] = []
-                                    ranks[idx].append((nome, func, foto, vulgo, rg)) 
-
-                                for rank_idx in sorted(ranks.keys()):
-                                    nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                    html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
+                                    html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
+                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
+                                    html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div><div class='info-oculta'><div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div></div></div>"
                                     
-                                    for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
-                                        bg_color, b_color = ("#E74C3C", "#ffffff") if p_nome == clean_text(alvo_selecionado) else ("#4a4f63", "#333333")
-                                        img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>" if str(p_foto).startswith("http") else ""
-                                        
-                                        html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
-                                        if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
-                                        html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div><div class='info-oculta'><div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div></div></div>"
-                                        
-                                    html_organograma += "</div>"
                                 html_organograma += "</div>"
-                            st.markdown(html_organograma, unsafe_allow_html=True)
-                        else: st.warning("O alvo não possui um território cadastrado para mapeamento.")
-                    else: st.info("Selecione um alvo na busca acima para gerar o organograma territorial da sua área.")
+                            html_organograma += "</div>"
+                        st.markdown(html_organograma, unsafe_allow_html=True)
+                    else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
 
                 with aba_tabela:
                     ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
