@@ -638,86 +638,120 @@ else:
                         
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
-                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO CIRÚRGICO E COMPACTO
+                        # ==========================================================
+                        # 1. NOVO MOTOR CSS (SEPARANDO TELA DE IMPRESSÃO)
+                        # ==========================================================
                         st.markdown("""
                         <style>
+                        /* ----- ESTILOS DA TELA (MODO ESCURO) ----- */
+                        .org-header { background-color:#1E2130; padding:15px; border-radius:10px; margin-bottom:15px; text-align:center; }
+                        .org-header h2 { color:#ffffff; margin:0; font-family: sans-serif; }
+                        
+                        .orcrim-box { border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:20px; font-family: sans-serif; }
+                        .orcrim-box h3 { text-align:center; color:#ff4b4b; margin-top:0; }
+                        
+                        .nivel-header { background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px; font-family: sans-serif; }
+                        
+                        .cards-container { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+                        
+                        .tatico-card { background-color:#4a4f63; border:2px solid #333333; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair; transition: transform 0.2s; font-family: sans-serif; }
+                        .tatico-card:hover { transform: scale(1.05); z-index: 10; }
+                        .tatico-card.alvo { background-color:#E74C3C; border-color:#ffffff; }
+                        
+                        .tatico-card img { width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid #fff; }
+                        .tatico-card .no-foto { width:135px; height:135px; border-radius:50%; background:#333; font-size:60px; line-height:135px; margin-bottom:6px; border:2px solid #fff; }
+                        
+                        .tatico-card .nome { color:white; font-size:13px; font-weight:bold; line-height:1.2; margin-bottom: 2px; }
+                        .tatico-card .vulgo { color:#F1C40F; font-size:12px; font-style:italic; margin-bottom: 2px; }
+                        .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
+                        .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
+
+                        /* ----- ESTILOS DE IMPRESSÃO (MODO CLARO E COMPACTO) ----- */
                         @media print {
-                            body * { visibility: hidden !important; }
-                            #zona-de-impressao, #zona-de-impressao * { visibility: visible !important; }
+                            /* Esconde os menus laterais, botões e tabs sem quebrar o fluxo da página */
+                            [data-testid="stSidebar"], 
+                            [data-testid="stHeader"], 
+                            [data-testid="stToolbar"],
+                            .stSelectbox, 
+                            .stButton, 
+                            iframe,
+                            [data-testid="stTabs"] > div:first-child { 
+                                display: none !important; 
+                            }
+
+                            /* Força o papel a ficar branco, anulando o tema escuro do Streamlit */
+                            body, html, .stApp, .main, .block-container {
+                                background: white !important;
+                                background-color: white !important;
+                                color: black !important;
+                            }
+
+                            /* Remove as margens gordas do site para aproveitar bem o papel */
+                            .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+
+                            /* Remove os fundos escuros e ajusta textos para a impressão */
+                            .org-header { background: transparent !important; padding: 5px !important; margin-bottom: 5px !important; }
+                            .org-header h2 { color: black !important; font-size: 18px !important; }
                             
-                            #zona-de-impressao {
-                                position: absolute !important;
-                                left: 0 !important; top: 0 !important;
-                                width: 100% !important; margin: 0 !important; padding: 0 !important;
-                            }
-
-                            iframe { display: none !important; }
-
-                            /* COMPACTAÇÃO DOS CARDS PARA IMPRESSÃO */
-                            .tatico-card {
-                                border: 1px solid #444 !important; /* Borda mais fina */
-                                background-color: #fff !important; 
+                            .orcrim-box { background: transparent !important; border: 2px solid #000 !important; padding: 10px !important; margin-bottom: 10px !important; page-break-inside: auto !important; }
+                            .orcrim-box h3 { color: black !important; font-size: 16px !important; }
+                            
+                            .nivel-header { background: transparent !important; color: black !important; border-bottom: 1px solid #000 !important; padding: 2px !important; margin-top: 5px !important; margin-bottom: 5px !important; }
+                            
+                            /* Espreme os cards para caber muitos numa linha */
+                            .cards-container { gap: 4px !important; }
+                            
+                            .tatico-card { 
+                                background: transparent !important; 
+                                border: 1px solid #000 !important; 
+                                padding: 4px !important; 
+                                min-width: 110px !important; 
+                                max-width: 120px !important; 
                                 box-shadow: none !important;
-                                page-break-inside: avoid !important;
+                                page-break-inside: avoid !important; /* Salva o card de ser cortado na quebra da página */
                                 break-inside: avoid !important;
-                                padding: 6px !important; /* Menos espaço interno */
-                                min-width: 120px !important; /* Card mais estreito */
-                                max-width: 140px !important;
                             }
+                            .tatico-card.alvo { border: 3px solid #E74C3C !important; } /* Mantém vermelho só pro alvo buscado */
                             
                             /* Encolhe as fotos no PDF */
-                            .tatico-card img {
-                                width: 70px !important; 
-                                height: 70px !important;
-                                margin-bottom: 4px !important;
-                                border-width: 1px !important;
-                            }
+                            .tatico-card img, .tatico-card .no-foto { width: 55px !important; height: 55px !important; border: 1px solid #000 !important; margin-bottom: 2px !important; line-height: 55px !important; font-size: 25px !important; }
                             
-                            /* Força a cor preta e encolhe o espaçamento das linhas */
-                            .tatico-card div, .tatico-card span {
-                                color: #000 !important;
-                                text-shadow: none !important;
-                                line-height: 1.1 !important; 
-                            }
-                            
-                            /* Tamanho das fontes específicos para o PDF */
-                            .tatico-card > div:nth-of-type(1) { font-size: 10px !important; } /* Nome */
-                            .tatico-card > div:nth-of-type(2) { font-size: 9px !important; }  /* Vulgo */
-                            .tatico-card > div:nth-of-type(3) { font-size: 8px !important; }  /* Função */
-                            .tatico-card > div:nth-of-type(4) { font-size: 9px !important; margin-top: 4px !important; padding-top: 2px !important;} /* RG */
+                            /* Força tudo dentro do card a ficar preto e minúsculo */
+                            .tatico-card .nome, .tatico-card .vulgo, .tatico-card .funcao, .tatico-card .rg { color: black !important; }
+                            .tatico-card .nome { font-size: 9px !important; }
+                            .tatico-card .vulgo { font-size: 8px !important; }
+                            .tatico-card .funcao { font-size: 8px !important; }
+                            .tatico-card .rg { font-size: 8px !important; border-top: 1px dashed #000 !important; padding-top: 2px !important; margin-top: 2px !important; }
 
-                            /* Reduz espaçamentos gerais do organograma */
-                            h2 { font-size: 16px !important; padding: 8px !important; }
-                            h3 { font-size: 14px !important; margin-bottom: 5px !important; }
-                            div[style*="gap:12px"] { gap: 6px !important; } /* Cola os cards um no outro */
-
-                            @page { margin: 5mm; size: landscape; } /* Menos margem na folha A4 */
+                            @page { margin: 5mm; size: landscape; }
                         }
                         </style>
                         """, unsafe_allow_html=True)
 
-                        # 2. INJEÇÃO DO BOTÃO
+                        # ==========================================================
+                        # 2. BOTÃO DE IMPRIMIR
+                        # ==========================================================
                         components.html("""
                         <div style='display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;'>
                             <button onclick='window.parent.print()' style='background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;'>
-                                🖨️ Imprimir / Salvar PDF
+                                🖨️ Imprimir Organograma Tático
                             </button>
                         </div>
                         """, height=55)
 
-                        # 3. HTML DO ORGANOGRAMA
-                        html_organograma = f"<div id='zona-de-impressao'>"
+                        # ==========================================================
+                        # 3. CONSTRUTOR HTML (USANDO CLASSES EM VEZ DE STYLES)
+                        # ==========================================================
+                        html_organograma = "<div id='zona-de-impressao'>"
                         
-                        html_organograma += f"<div style='background-color:#1E2130; padding:15px; border-radius:10px; margin-bottom:15px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        html_organograma += f"<div class='org-header'><h2>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
                         
                         for org in orgs:
                             org_cl = clean_text(org)
                             if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                             
-                            html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:20px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
+                            html_organograma += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
                             
-                            html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
-
                             df_org = df_area[df_area["Organização"] == org]
                             ranks = {}
                             for _, r in df_org.iterrows():
@@ -734,24 +768,30 @@ else:
 
                             for rank_idx in sorted(ranks.keys()):
                                 nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                html_organograma += f"<div style='background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
+                                
+                                html_organograma += f"<div class='nivel-header'>{nome_nivel}</div>"
+                                html_organograma += "<div class='cards-container'>"
                                 
                                 for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
-                                    bg_color, b_color = ("#E74C3C", "#ffffff") if p_nome == clean_text(alvo_selecionado) else ("#4a4f63", "#333333")
-                                    img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>" if str(p_foto).startswith("http") else ""
+                                    is_alvo = (p_nome == clean_text(alvo_selecionado))
+                                    card_class = "tatico-card alvo" if is_alvo else "tatico-card"
                                     
-                                    # O card continua grande aqui no HTML (para o monitor), mas o CSS lá em cima vai esmagar ele no PDF!
-                                    html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div>{p_nome}</div>"
+                                    # Se não tiver foto, coloca um ícone pra não quebrar a simetria
+                                    img_html = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
                                     
-                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div>\"{p_vulgo}\"</div>"
+                                    html_organograma += f"<div class='{card_class}'>"
+                                    html_organograma += img_html
+                                    html_organograma += f"<div class='nome'>{p_nome}</div>"
+                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: 
+                                        html_organograma += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
+                                    html_organograma += f"<div class='funcao'>({p_func})</div>"
+                                    html_organograma += f"<div class='rg'><b>RG:</b> {p_rg}</div>"
+                                    html_organograma += "</div>" # fecha card
                                     
-                                    html_organograma += f"<div>({p_func})</div>"
-                                    html_organograma += f"<div style='border-top: 1px dashed #7f8c8d; width: 100%;'><b>RG:</b> {p_rg}</div></div>"
-                                    
-                                html_organograma += "</div>"
-                            html_organograma += "</div>"
+                                html_organograma += "</div>" # fecha cards-container
+                            html_organograma += "</div>" # fecha orcrim-box
                         
-                        html_organograma += "</div>"
+                        html_organograma += "</div>" # fecha zona-de-impressao
                         
                         st.markdown(html_organograma, unsafe_allow_html=True)
                     else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
