@@ -638,49 +638,60 @@ else:
                         
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
-                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO CIRÚRGICO
+                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO CIRÚRGICO E COMPACTO
                         st.markdown("""
                         <style>
                         @media print {
-                            /* 1. Esconde absolutamente TUDO da página por padrão */
-                            body * {
-                                visibility: hidden !important;
-                            }
+                            body * { visibility: hidden !important; }
+                            #zona-de-impressao, #zona-de-impressao * { visibility: visible !important; }
                             
-                            /* 2. Mostra APENAS a div de impressão e tudo dentro dela */
-                            #zona-de-impressao, #zona-de-impressao * {
-                                visibility: visible !important;
-                            }
-                            
-                            /* 3. Arranca o organograma de onde ele estiver e cola no topo-esquerdo da folha */
                             #zona-de-impressao {
                                 position: absolute !important;
-                                left: 0 !important;
-                                top: 0 !important;
-                                width: 100% !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
+                                left: 0 !important; top: 0 !important;
+                                width: 100% !important; margin: 0 !important; padding: 0 !important;
                             }
 
-                            /* 4. Esconde o botão de imprimir durante a impressão */
                             iframe { display: none !important; }
 
-                            /* 5. Formatação dos cards para aparecerem perfeitos no papel branco */
+                            /* COMPACTAÇÃO DOS CARDS PARA IMPRESSÃO */
                             .tatico-card {
-                                border: 2px solid #333 !important; /* Borda cinza escura */
-                                background-color: #fff !important; /* Fundo branco garantido */
+                                border: 1px solid #444 !important; /* Borda mais fina */
+                                background-color: #fff !important; 
                                 box-shadow: none !important;
-                                page-break-inside: avoid !important; /* Evita que o card seja cortado no meio pela quebra de página */
+                                page-break-inside: avoid !important;
                                 break-inside: avoid !important;
+                                padding: 6px !important; /* Menos espaço interno */
+                                min-width: 120px !important; /* Card mais estreito */
+                                max-width: 140px !important;
                             }
                             
-                            /* 6. Garante que todos os textos (nome, vulgo, RG) fiquem pretos na impressão */
+                            /* Encolhe as fotos no PDF */
+                            .tatico-card img {
+                                width: 70px !important; 
+                                height: 70px !important;
+                                margin-bottom: 4px !important;
+                                border-width: 1px !important;
+                            }
+                            
+                            /* Força a cor preta e encolhe o espaçamento das linhas */
                             .tatico-card div, .tatico-card span {
                                 color: #000 !important;
                                 text-shadow: none !important;
+                                line-height: 1.1 !important; 
                             }
+                            
+                            /* Tamanho das fontes específicos para o PDF */
+                            .tatico-card > div:nth-of-type(1) { font-size: 10px !important; } /* Nome */
+                            .tatico-card > div:nth-of-type(2) { font-size: 9px !important; }  /* Vulgo */
+                            .tatico-card > div:nth-of-type(3) { font-size: 8px !important; }  /* Função */
+                            .tatico-card > div:nth-of-type(4) { font-size: 9px !important; margin-top: 4px !important; padding-top: 2px !important;} /* RG */
 
-                            @page { margin: 10mm; size: landscape; }
+                            /* Reduz espaçamentos gerais do organograma */
+                            h2 { font-size: 16px !important; padding: 8px !important; }
+                            h3 { font-size: 14px !important; margin-bottom: 5px !important; }
+                            div[style*="gap:12px"] { gap: 6px !important; } /* Cola os cards um no outro */
+
+                            @page { margin: 5mm; size: landscape; } /* Menos margem na folha A4 */
                         }
                         </style>
                         """, unsafe_allow_html=True)
@@ -694,16 +705,16 @@ else:
                         </div>
                         """, height=55)
 
-                        # 3. HTML DO ORGANOGRAMA (Iniciando a div wrapper #zona-de-impressao)
+                        # 3. HTML DO ORGANOGRAMA
                         html_organograma = f"<div id='zona-de-impressao'>"
                         
-                        html_organograma += f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        html_organograma += f"<div style='background-color:#1E2130; padding:15px; border-radius:10px; margin-bottom:15px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
                         
                         for org in orgs:
                             org_cl = clean_text(org)
                             if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                             
-                            html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
+                            html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:20px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
                             
                             html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
 
@@ -723,22 +734,23 @@ else:
 
                             for rank_idx in sorted(ranks.keys()):
                                 nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                html_organograma += f"<div style='background-color:#2d3446; padding:8px; border-radius:5px; margin-top:20px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:14px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
+                                html_organograma += f"<div style='background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px;'>{nome_nivel}</div><div style='display:flex; flex-wrap:wrap; justify-content:center; gap:12px;'>"
                                 
                                 for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
                                     bg_color, b_color = ("#E74C3C", "#ffffff") if p_nome == clean_text(alvo_selecionado) else ("#4a4f63", "#333333")
                                     img_html = f"<img src='{p_foto}' style='width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid {b_color}; box-shadow: 0 2px 4px rgba(0,0,0,0.4);'>" if str(p_foto).startswith("http") else ""
                                     
-                                    html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
-                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
+                                    # O card continua grande aqui no HTML (para o monitor), mas o CSS lá em cima vai esmagar ele no PDF!
+                                    html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div>{p_nome}</div>"
                                     
-                                    html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
-                                    html_organograma += f"<div style='color:#b0b4c4; font-size:11px; margin-top:8px; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%;'><b>RG:</b> {p_rg}</div></div>"
+                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div>\"{p_vulgo}\"</div>"
+                                    
+                                    html_organograma += f"<div>({p_func})</div>"
+                                    html_organograma += f"<div style='border-top: 1px dashed #7f8c8d; width: 100%;'><b>RG:</b> {p_rg}</div></div>"
                                     
                                 html_organograma += "</div>"
                             html_organograma += "</div>"
                         
-                        # Fecha a div principal (zona-de-impressao)
                         html_organograma += "</div>"
                         
                         st.markdown(html_organograma, unsafe_allow_html=True)
