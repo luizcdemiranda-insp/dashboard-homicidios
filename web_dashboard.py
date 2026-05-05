@@ -57,6 +57,7 @@ def gerar_hash(senha):
 if "logado" not in st.session_state: st.session_state.logado = False
 if "user_nivel" not in st.session_state: st.session_state.user_nivel = None
 if "user_nome" not in st.session_state: st.session_state.user_nome = None
+if "toast_orcrim_shown" not in st.session_state: st.session_state.toast_orcrim_shown = False
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -486,6 +487,10 @@ else:
         
     menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
 
+    # Reseta o aviso caso o usuário saia do menu ORCRIM
+    if "ORCRIM" not in menu:
+        st.session_state.toast_orcrim_shown = False
+
     sub_menu_orcrim = None
     if "ORCRIM" in menu:
         st.sidebar.markdown("---")
@@ -573,7 +578,10 @@ else:
                 df_notion = carregar_dados_notion()
                 
             if not df_notion.empty:
-                st.toast(f"✅ {len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
+                # O aviso agora exibe somente um checkmark e apenas na primeira vez que a aba ORCRIM é carregada
+                if not st.session_state.toast_orcrim_shown:
+                    st.toast(f"{len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
+                    st.session_state.toast_orcrim_shown = True
                 
                 # Inicializa as chaves do session_state
                 if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
@@ -585,11 +593,11 @@ else:
 
                 col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
                 
-                # Extrai listas globais e ordena alfabeticamente ignorando case para evitar erros com maiúsculas/minúsculas
+                # Extrai listas globais e ordena alfabeticamente
                 terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
                 nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
 
-                # Lógica de exclusividade (se um tem valor, o outro é bloqueado)
+                # Lógica de exclusividade
                 alvo_desativado = bool(st.session_state.terr_busca)
                 terr_desativado = bool(st.session_state.alvo_busca)
 
@@ -603,38 +611,12 @@ else:
                 
                 st.write("---")
                 
-                aba_dossie, aba_organograma, aba_tabela = st.tabs(["📇 DOSSIÊ TÁTICO", "🕸️ ORGANOGRAMA", "📋 TABELA GERAL"])
-                
-                with aba_dossie:
-                    if alvo_selecionado:
-                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        col_foto, col_info = st.columns([1, 2])
-                        with col_foto:
-                            foto_url = dados_alvo.get("Foto", "")
-                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
-                            else: st.info("👤 Sem foto no arquivo.")
-                                
-                        with col_info:
-                            vulgo = dados_alvo.get("Vulgo", "N/I")
-                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
-                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
-                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
-                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
-                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
-                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
-                            
-                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
-                            st.write("---")
-                            st.markdown("#### 📝 Informe Analítico")
-                            st.warning(dados_alvo.get("Informe", ""))
-                    else:
-                        st.info("Aguardando seleção de um qualificado no buscador acima.")
+                # Reorganizando a ordem das abas
+                aba_organograma, aba_dossie, aba_tabela = st.tabs(["🕸️ ORGANOGRAMA", "📇 DOSSIÊ TÁTICO", "📋 TABELA GERAL"])
                 
                 with aba_organograma:
                     atuacao_alvo = ""
                     
-                    # Identifica qual busca acionou o mapa
                     if alvo_selecionado:
                         dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
                         atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
@@ -662,7 +644,9 @@ else:
                             if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
                             
                             html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
-                            html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card .info-oculta { max-height: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }.tatico-card:hover .info-oculta { max-height: 100px; opacity: 1; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #7f8c8d; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
+                            
+                            # CSS simplificado, removendo a classe de ocultação (.info-oculta)
+                            html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
 
                             df_org = df_area[df_area["Organização"] == org]
                             ranks = {}
@@ -688,13 +672,42 @@ else:
                                     
                                     html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
                                     if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
-                                    html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div><div class='info-oculta'><div style='color:#b0b4c4; font-size:11px; padding-bottom:4px;'><b>RG:</b> {p_rg}</div></div></div>"
+                                    
+                                    # Bloco do RG agora permanentemente visível
+                                    html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
+                                    html_organograma += f"<div style='color:#b0b4c4; font-size:11px; margin-top:8px; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%;'><b>RG:</b> {p_rg}</div></div>"
                                     
                                 html_organograma += "</div>"
                             html_organograma += "</div>"
                         st.markdown(html_organograma, unsafe_allow_html=True)
                     else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
 
+                with aba_dossie:
+                    if alvo_selecionado:
+                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                        col_foto, col_info = st.columns([1, 2])
+                        with col_foto:
+                            foto_url = dados_alvo.get("Foto", "")
+                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
+                            else: st.info("👤 Sem foto no arquivo.")
+                                
+                        with col_info:
+                            vulgo = dados_alvo.get("Vulgo", "N/I")
+                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
+                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
+                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
+                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
+                            st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
+                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
+                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
+                            
+                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
+                            st.write("---")
+                            st.markdown("#### 📝 Informe Analítico")
+                            st.warning(dados_alvo.get("Informe", ""))
+                    else:
+                        st.info("Aguardando seleção de um qualificado no buscador acima.")
+                
                 with aba_tabela:
                     ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
                     c_ex = [c for c in ordem_ideal if c in df_notion.columns]
