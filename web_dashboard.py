@@ -579,12 +579,10 @@ else:
                 df_notion = carregar_dados_notion()
                 
             if not df_notion.empty:
-                # O aviso agora exibe somente um checkmark e apenas na primeira vez que a aba ORCRIM é carregada
                 if not st.session_state.toast_orcrim_shown:
                     st.toast(f"{len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
                     st.session_state.toast_orcrim_shown = True
                 
-                # Inicializa as chaves do session_state
                 if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
                 if "terr_busca" not in st.session_state: st.session_state.terr_busca = ""
                 
@@ -594,11 +592,9 @@ else:
 
                 col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
                 
-                # Extrai listas globais e ordena alfabeticamente
                 terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
                 nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
 
-                # Lógica de exclusividade
                 alvo_desativado = bool(st.session_state.terr_busca)
                 terr_desativado = bool(st.session_state.alvo_busca)
 
@@ -612,7 +608,6 @@ else:
                 
                 st.write("---")
                 
-                # Reorganizando a ordem das abas
                 aba_organograma, aba_dossie, aba_tabela = st.tabs(["🕸️ ORGANOGRAMA", "📇 DOSSIÊ TÁTICO", "📋 TABELA GERAL"])
                 
                 with aba_organograma:
@@ -639,7 +634,7 @@ else:
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
                         # ==========================================================
-                        # 1. NOVO MOTOR CSS (SEPARANDO TELA DE IMPRESSÃO)
+                        # 1. CSS HÍBRIDO (TELA ESCURA / IMPRESSÃO CLARA E COMPACTA)
                         # ==========================================================
                         st.markdown("""
                         <style>
@@ -659,71 +654,71 @@ else:
                         .tatico-card.alvo { background-color:#E74C3C; border-color:#ffffff; }
                         
                         .tatico-card img { width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid #fff; }
-                        .tatico-card .no-foto { width:135px; height:135px; border-radius:50%; background:#333; font-size:60px; line-height:135px; margin-bottom:6px; border:2px solid #fff; }
+                        .tatico-card .no-foto { width:135px; height:135px; border-radius:50%; background:#333; font-size:60px; line-height:135px; margin-bottom:6px; border:2px solid #fff; text-align:center; color:white; }
                         
                         .tatico-card .nome { color:white; font-size:13px; font-weight:bold; line-height:1.2; margin-bottom: 2px; }
                         .tatico-card .vulgo { color:#F1C40F; font-size:12px; font-style:italic; margin-bottom: 2px; }
                         .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
                         .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
 
-                        /* ----- ESTILOS DE IMPRESSÃO (MODO CLARO E COMPACTO) ----- */
+                        /* ----- MODO DE IMPRESSÃO (CLARO E COMPACTO) ----- */
                         @media print {
-                            /* Esconde os menus laterais, botões e tabs sem quebrar o fluxo da página */
+                            /* 1. Esconde APENAS a interface do Streamlit (Menus, botões, tabs) */
+                            header[data-testid="stHeader"], 
                             [data-testid="stSidebar"], 
-                            [data-testid="stHeader"], 
+                            [data-testid="stDecoration"],
                             [data-testid="stToolbar"],
+                            div[data-testid="stTabs"] > div:first-child,
                             .stSelectbox, 
                             .stButton, 
-                            iframe,
-                            [data-testid="stTabs"] > div:first-child { 
+                            iframe { 
                                 display: none !important; 
                             }
 
-                            /* Força o papel a ficar branco, anulando o tema escuro do Streamlit */
-                            body, html, .stApp, .main, .block-container {
+                            /* 2. Força o papel a ficar branco, anulando o tema escuro */
+                            .stApp, .main, .block-container {
                                 background: white !important;
                                 background-color: white !important;
-                                color: black !important;
+                                padding: 0 !important;
+                                margin: 0 !important;
+                                max-width: 100% !important;
                             }
 
-                            /* Remove as margens gordas do site para aproveitar bem o papel */
-                            .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-
-                            /* Remove os fundos escuros e ajusta textos para a impressão */
-                            .org-header { background: transparent !important; padding: 5px !important; margin-bottom: 5px !important; }
-                            .org-header h2 { color: black !important; font-size: 18px !important; }
+                            /* 3. Limpa os fundos escuros e pinta os títulos de preto */
+                            .org-header { background: transparent !important; padding: 5px !important; margin-bottom: 10px !important; border-bottom: 2px solid #000 !important; }
+                            .org-header h2 { color: #000000 !important; font-size: 18px !important; }
                             
-                            .orcrim-box { background: transparent !important; border: 2px solid #000 !important; padding: 10px !important; margin-bottom: 10px !important; page-break-inside: auto !important; }
-                            .orcrim-box h3 { color: black !important; font-size: 16px !important; }
+                            .orcrim-box { background: transparent !important; border: 2px solid #000 !important; padding: 10px !important; margin-bottom: 15px !important; page-break-inside: auto !important; }
+                            .orcrim-box h3 { color: #000000 !important; font-size: 16px !important; margin-bottom: 5px !important; }
                             
-                            .nivel-header { background: transparent !important; color: black !important; border-bottom: 1px solid #000 !important; padding: 2px !important; margin-top: 5px !important; margin-bottom: 5px !important; }
+                            .nivel-header { background: #eeeeee !important; color: #000000 !important; border: 1px solid #000 !important; padding: 4px !important; margin-top: 10px !important; margin-bottom: 10px !important; font-size: 12px !important; }
                             
-                            /* Espreme os cards para caber muitos numa linha */
-                            .cards-container { gap: 4px !important; }
+                            /* 4. Formata os cards para não cortarem no meio da página (break-inside) */
+                            .cards-container { gap: 8px !important; }
                             
                             .tatico-card { 
                                 background: transparent !important; 
-                                border: 1px solid #000 !important; 
-                                padding: 4px !important; 
+                                border: 2px solid #333333 !important; 
+                                padding: 5px !important; 
                                 min-width: 110px !important; 
-                                max-width: 120px !important; 
+                                max-width: 130px !important; 
                                 box-shadow: none !important;
-                                page-break-inside: avoid !important; /* Salva o card de ser cortado na quebra da página */
+                                page-break-inside: avoid !important; 
                                 break-inside: avoid !important;
                             }
-                            .tatico-card.alvo { border: 3px solid #E74C3C !important; } /* Mantém vermelho só pro alvo buscado */
                             
-                            /* Encolhe as fotos no PDF */
-                            .tatico-card img, .tatico-card .no-foto { width: 55px !important; height: 55px !important; border: 1px solid #000 !important; margin-bottom: 2px !important; line-height: 55px !important; font-size: 25px !important; }
+                            .tatico-card.alvo { border: 3px solid #E74C3C !important; } 
                             
-                            /* Força tudo dentro do card a ficar preto e minúsculo */
-                            .tatico-card .nome, .tatico-card .vulgo, .tatico-card .funcao, .tatico-card .rg { color: black !important; }
-                            .tatico-card .nome { font-size: 9px !important; }
-                            .tatico-card .vulgo { font-size: 8px !important; }
-                            .tatico-card .funcao { font-size: 8px !important; }
-                            .tatico-card .rg { font-size: 8px !important; border-top: 1px dashed #000 !important; padding-top: 2px !important; margin-top: 2px !important; }
+                            /* 5. Ajusta fotos e textos do card para impressão */
+                            .tatico-card img, .tatico-card .no-foto { width: 55px !important; height: 55px !important; border: 1px solid #000 !important; margin-bottom: 4px !important; line-height: 55px !important; font-size: 25px !important; }
+                            
+                            .tatico-card .nome, .tatico-card .vulgo, .tatico-card .funcao, .tatico-card .rg { color: #000000 !important; }
+                            .tatico-card .nome { font-size: 10px !important; }
+                            .tatico-card .vulgo { font-size: 9px !important; }
+                            .tatico-card .funcao { font-size: 9px !important; }
+                            .tatico-card .rg { font-size: 9px !important; border-top: 1px dashed #000 !important; padding-top: 3px !important; margin-top: 3px !important; }
 
-                            @page { margin: 5mm; size: landscape; }
+                            @page { margin: 10mm; size: landscape; }
                         }
                         </style>
                         """, unsafe_allow_html=True)
