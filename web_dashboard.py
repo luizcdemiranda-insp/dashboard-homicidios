@@ -635,57 +635,57 @@ else:
                             elif "FRENTE" in f_up: return 2, "FRENTE"
                             elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
                             else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
-                                                
-                        # Injeção de CSS Mágico para Impressão + Botão de Imprimir
+                        
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
-                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO LIMPO (Fundo branco, texto preto)
+                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO CIRÚRGICO
                         st.markdown("""
                         <style>
                         @media print {
-                            /* Esconde os menus, botões e o iframe do botão de imprimir */
-                            [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stTabs"] > div:first-child, iframe { 
-                                display: none !important; 
+                            /* 1. Esconde absolutamente TUDO da página por padrão */
+                            body * {
+                                visibility: hidden !important;
                             }
                             
-                            /* Força o fundo da página a ser 100% branco */
-                            html, body, .stApp, [data-testid="stAppViewContainer"], .main {
-                                background-color: white !important;
-                                background: white !important;
+                            /* 2. Mostra APENAS a div de impressão e tudo dentro dela */
+                            #zona-de-impressao, #zona-de-impressao * {
+                                visibility: visible !important;
+                            }
+                            
+                            /* 3. Arranca o organograma de onde ele estiver e cola no topo-esquerdo da folha */
+                            #zona-de-impressao {
+                                position: absolute !important;
+                                left: 0 !important;
+                                top: 0 !important;
+                                width: 100% !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
                             }
 
-                            /* Tira o preenchimento escuro de dentro dos blocos e cards */
-                            div { 
-                                background-color: transparent !important; 
-                            }
+                            /* 4. Esconde o botão de imprimir durante a impressão */
+                            iframe { display: none !important; }
 
-                            /* Pinta TODOS os textos de PRETO para aparecerem no papel */
-                            h2, h3, div, span, b { 
-                                color: #000000 !important; 
+                            /* 5. Formatação dos cards para aparecerem perfeitos no papel branco */
+                            .tatico-card {
+                                border: 2px solid #333 !important; /* Borda cinza escura */
+                                background-color: #fff !important; /* Fundo branco garantido */
+                                box-shadow: none !important;
+                                page-break-inside: avoid !important; /* Evita que o card seja cortado no meio pela quebra de página */
+                                break-inside: avoid !important;
+                            }
+                            
+                            /* 6. Garante que todos os textos (nome, vulgo, RG) fiquem pretos na impressão */
+                            .tatico-card div, .tatico-card span {
+                                color: #000 !important;
                                 text-shadow: none !important;
                             }
 
-                            /* Coloca uma borda nos criminosos para manter a organização, e evita que o card seja cortado no meio da página */
-                            .tatico-card {
-                                border: 2px solid #555555 !important;
-                                page-break-inside: avoid !important;
-                                break-inside: avoid !important;
-                                box-shadow: none !important;
-                            }
-
-                            /* Se for o Alvo Principal (que antes tinha o fundo vermelho), ganha uma borda vermelha mais grossa para destacar */
-                            .tatico-card[style*="background-color:#E74C3C"], .tatico-card[style*="background-color: #E74C3C"] {
-                                border: 4px solid #E74C3C !important;
-                            }
-
-                            /* Ajuste da margem e formato da folha */
                             @page { margin: 10mm; size: landscape; }
                         }
                         </style>
                         """, unsafe_allow_html=True)
 
-                        # 2. INJEÇÃO DO BOTÃO (Usando o 'components.html' que permite JavaScript)
-                        # Nota: Usamos 'window.parent.print()' porque o botão roda dentro de um mini-iframe
+                        # 2. INJEÇÃO DO BOTÃO
                         components.html("""
                         <div style='display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;'>
                             <button onclick='window.parent.print()' style='background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;'>
@@ -694,12 +694,10 @@ else:
                         </div>
                         """, height=55)
 
-                        # 3. HTML DO ORGANOGRAMA (Inicia a variável normalmente)
-                        html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        # 3. HTML DO ORGANOGRAMA (Iniciando a div wrapper #zona-de-impressao)
+                        html_organograma = f"<div id='zona-de-impressao'>"
                         
-                        for org in orgs:
-                            org_cl = clean_text(org)
-                            # ... (resto do seu código continua igualzinho a partir daqui)
+                        html_organograma += f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
                         
                         for org in orgs:
                             org_cl = clean_text(org)
@@ -707,7 +705,6 @@ else:
                             
                             html_organograma += f"<div style='border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:30px;'><h3 style='text-align:center; color:#ff4b4b; margin-top:0;'>⚙️ ORCRIM: {org_cl}</h3>"
                             
-                            # CSS simplificado, removendo a classe de ocultação (.info-oculta)
                             html_organograma += "<style>.tatico-card { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; }.tatico-card:hover { transform: scale(1.15); z-index: 999; box-shadow: 0 14px 28px rgba(0,0,0,0.5), 0 10px 10px rgba(0,0,0,0.4) !important; }.tatico-card img { transition: all 0.3s ease; }.tatico-card:hover img { width: 145px !important; height: 145px !important; border-radius: 12px !important; margin-bottom: 12px; }</style>"
 
                             df_org = df_area[df_area["Organização"] == org]
@@ -735,12 +732,15 @@ else:
                                     html_organograma += f"<div class='tatico-card' style='background-color:{bg_color}; border:2px solid {b_color}; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair;'>{img_html}<div style='color:white; font-size:13px; font-weight:bold;'>{p_nome}</div>"
                                     if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_organograma += f"<div style='color:#F1C40F; font-size:12px; font-style:italic; margin-top:2px;'>\"{p_vulgo}\"</div>"
                                     
-                                    # Bloco do RG agora permanentemente visível
                                     html_organograma += f"<div style='color:#e0e0e0; font-size:11px; margin-top:4px;'>({p_func})</div>"
                                     html_organograma += f"<div style='color:#b0b4c4; font-size:11px; margin-top:8px; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%;'><b>RG:</b> {p_rg}</div></div>"
                                     
                                 html_organograma += "</div>"
                             html_organograma += "</div>"
+                        
+                        # Fecha a div principal (zona-de-impressao)
+                        html_organograma += "</div>"
+                        
                         st.markdown(html_organograma, unsafe_allow_html=True)
                     else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
 
