@@ -15,6 +15,7 @@ import time
 from io import StringIO
 import xml.etree.ElementTree as ET
 import re
+import streamlit.components.v1 as components
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -638,32 +639,38 @@ else:
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
                         # Injeção de CSS Mágico para Impressão + Botão de Imprimir
-                        html_organograma = f"""
+                        orgs = df_area["Organização"].dropna().unique().tolist()
+                        
+                        # 1. INJEÇÃO DO CSS (O st.markdown aceita <style> sem problemas)
+                        st.markdown("""
                         <style>
-                        @media print {{
-                            /* Esconde barra lateral, cabeçalho e abas do Streamlit */
-                            [data-testid="stSidebar"] {{ display: none !important; }}
-                            [data-testid="stHeader"] {{ display: none !important; }}
-                            [data-testid="stTabs"] > div:first-child {{ display: none !important; }}
-                            /* Esconde as caixas de busca e botão de limpar */
-                            .stSelectbox, .stButton, button {{ display: none !important; }}
-                            /* Força o navegador a imprimir o fundo escuro e as cores dos cards */
-                            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
-                            /* Tira margens da página para aproveitar o espaço */
-                            @page {{ margin: 1cm; size: landscape; }}
-                        }}
+                        @media print {
+                            [data-testid="stSidebar"] { display: none !important; }
+                            [data-testid="stHeader"] { display: none !important; }
+                            [data-testid="stTabs"] > div:first-child { display: none !important; }
+                            .stSelectbox, .stButton, button, iframe { display: none !important; }
+                            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                            @page { margin: 1cm; size: landscape; }
+                        }
                         </style>
+                        """, unsafe_allow_html=True)
 
-                        <div style='display: flex; justify-content: flex-end; margin-bottom: 15px;'>
-                            <button onclick='window.print()' style='background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;'>
+                        # 2. INJEÇÃO DO BOTÃO (Usando o 'components.html' que permite JavaScript)
+                        # Nota: Usamos 'window.parent.print()' porque o botão roda dentro de um mini-iframe
+                        components.html("""
+                        <div style='display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;'>
+                            <button onclick='window.parent.print()' style='background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;'>
                                 🖨️ Imprimir / Salvar PDF
                             </button>
                         </div>
+                        """, height=55)
 
-                        <div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'>
-                            <h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2>
-                        </div>
-                        """
+                        # 3. HTML DO ORGANOGRAMA (Inicia a variável normalmente)
+                        html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        
+                        for org in orgs:
+                            org_cl = clean_text(org)
+                            # ... (resto do seu código continua igualzinho a partir daqui)
                         
                         for org in orgs:
                             org_cl = clean_text(org)
