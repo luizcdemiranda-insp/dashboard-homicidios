@@ -641,16 +641,47 @@ else:
                         # Injeção de CSS Mágico para Impressão + Botão de Imprimir
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
-                        # 1. INJEÇÃO DO CSS (O st.markdown aceita <style> sem problemas)
+                        # 1. INJEÇÃO DO CSS MODO DE IMPRESSÃO LIMPO (Fundo branco, texto preto)
                         st.markdown("""
                         <style>
                         @media print {
-                            [data-testid="stSidebar"] { display: none !important; }
-                            [data-testid="stHeader"] { display: none !important; }
-                            [data-testid="stTabs"] > div:first-child { display: none !important; }
-                            .stSelectbox, .stButton, button, iframe { display: none !important; }
-                            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                            @page { margin: 1cm; size: landscape; }
+                            /* Esconde os menus, botões e o iframe do botão de imprimir */
+                            [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stTabs"] > div:first-child, iframe { 
+                                display: none !important; 
+                            }
+                            
+                            /* Força o fundo da página a ser 100% branco */
+                            html, body, .stApp, [data-testid="stAppViewContainer"], .main {
+                                background-color: white !important;
+                                background: white !important;
+                            }
+
+                            /* Tira o preenchimento escuro de dentro dos blocos e cards */
+                            div { 
+                                background-color: transparent !important; 
+                            }
+
+                            /* Pinta TODOS os textos de PRETO para aparecerem no papel */
+                            h2, h3, div, span, b { 
+                                color: #000000 !important; 
+                                text-shadow: none !important;
+                            }
+
+                            /* Coloca uma borda nos criminosos para manter a organização, e evita que o card seja cortado no meio da página */
+                            .tatico-card {
+                                border: 2px solid #555555 !important;
+                                page-break-inside: avoid !important;
+                                break-inside: avoid !important;
+                                box-shadow: none !important;
+                            }
+
+                            /* Se for o Alvo Principal (que antes tinha o fundo vermelho), ganha uma borda vermelha mais grossa para destacar */
+                            .tatico-card[style*="background-color:#E74C3C"], .tatico-card[style*="background-color: #E74C3C"] {
+                                border: 4px solid #E74C3C !important;
+                            }
+
+                            /* Ajuste da margem e formato da folha */
+                            @page { margin: 10mm; size: landscape; }
                         }
                         </style>
                         """, unsafe_allow_html=True)
