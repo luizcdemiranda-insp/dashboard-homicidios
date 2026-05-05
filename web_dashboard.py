@@ -637,7 +637,33 @@ else:
                         
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
-                        html_organograma = f"<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'><h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                        # Injeção de CSS Mágico para Impressão + Botão de Imprimir
+html_organograma = f"""
+<style>
+@media print {{
+    /* Esconde barra lateral, cabeçalho e abas do Streamlit */
+    [data-testid="stSidebar"] {{ display: none !important; }}
+    [data-testid="stHeader"] {{ display: none !important; }}
+    [data-testid="stTabs"] > div:first-child {{ display: none !important; }}
+    /* Esconde as caixas de busca e botão de limpar */
+    .stSelectbox, .stButton, button {{ display: none !important; }}
+    /* Força o navegador a imprimir o fundo escuro e as cores dos cards */
+    * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+    /* Tira margens da página para aproveitar o espaço */
+    @page {{ margin: 1cm; size: landscape; }}
+}}
+</style>
+
+<div style='display: flex; justify-content: flex-end; margin-bottom: 15px;'>
+    <button onclick='window.print()' style='background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;'>
+        🖨️ Imprimir / Salvar PDF
+    </button>
+</div>
+
+<div style='background-color:#1E2130; padding:20px; border-radius:10px; margin-bottom:20px; text-align:center;'>
+    <h2 style='color:#ffffff; margin:0;'>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2>
+</div>
+"""
                         
                         for org in orgs:
                             org_cl = clean_text(org)
