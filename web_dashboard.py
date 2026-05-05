@@ -635,9 +635,7 @@ else:
                             elif "FRENTE" in f_up: return 2, "FRENTE"
                             elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
                             else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
-                        
-                        orgs = df_area["Organização"].dropna().unique().tolist()
-                        
+                                                
                         # Injeção de CSS Mágico para Impressão + Botão de Imprimir
                         orgs = df_area["Organização"].dropna().unique().tolist()
                         
