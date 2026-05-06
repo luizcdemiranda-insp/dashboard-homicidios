@@ -737,7 +737,7 @@ else:
                                 .funcao {{ font-size: 10px; margin-bottom: 4px; color: black; }}
                                 .rg {{ font-size: 10px; border-top: 1px dashed #666; padding-top: 4px; margin-top: auto; width: 100%; color: black; }}
                                 @media print {{
-                                    @page {{ margin: 10mm; size: landscape; }}
+                                    @page {{ margin: 10mm; }}
                                 }}
                             </style>
                         </head>
