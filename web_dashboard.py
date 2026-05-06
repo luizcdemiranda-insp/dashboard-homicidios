@@ -722,22 +722,33 @@ else:
                             <meta charset="utf-8">
                             <title>Organograma - {atuacao_alvo.upper()}</title>
                             <style>
-                                body {{ font-family: Arial, sans-serif; padding: 20px; background: white; color: black; }}
-                                .org-header h2 {{ text-align: center; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-transform: uppercase; color: black; }}
-                                .orcrim-box {{ border: 2px solid black; padding: 15px; margin-bottom: 20px; border-radius: 8px; page-break-inside: auto; }}
-                                .orcrim-box h3 {{ text-align: center; margin-top: 0; font-size: 18px; text-transform: uppercase; color: black; }}
-                                .nivel-header {{ background-color: #f0f0f0; border: 1px solid black; padding: 8px; margin: 15px 0; text-align: center; font-weight: bold; font-size: 14px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: black; }}
-                                .cards-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }}
-                                .tatico-card {{ border: 2px solid #333; padding: 10px; width: 140px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; }}
+                                /* Zera os espaços fantasmas e define uma margem mínima */
+                                body {{ font-family: Arial, sans-serif; padding: 0; margin: 0; background: white; color: black; }}
+                                
+                                /* Cabeçalhos mais compactos */
+                                .org-header h2 {{ text-align: center; border-bottom: 2px solid black; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; color: black; font-size: 16px; }}
+                                .orcrim-box {{ border: 2px solid black; padding: 8px; margin-bottom: 10px; border-radius: 6px; page-break-inside: auto; }}
+                                .orcrim-box h3 {{ text-align: center; margin-top: 0; font-size: 14px; text-transform: uppercase; color: black; margin-bottom: 6px; }}
+                                
+                                /* Barra de hierarquia fininha */
+                                .nivel-header {{ background-color: #f0f0f0; border: 1px solid black; padding: 4px; margin: 6px 0; text-align: center; font-weight: bold; font-size: 12px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: black; }}
+                                
+                                /* Cards espremidos inteligentemente */
+                                .cards-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }}
+                                .tatico-card {{ border: 2px solid #333; padding: 6px; width: 120px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; box-sizing: border-box; }}
                                 .tatico-card.alvo {{ border: 3px solid #E74C3C; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                                .tatico-card img {{ width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 1px solid black; margin-bottom: 8px; }}
-                                .tatico-card .no-foto {{ width: 70px; height: 70px; border-radius: 50%; background: #ccc; font-size: 30px; line-height: 70px; margin-bottom: 8px; border: 1px solid black; color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                                .nome {{ font-size: 11px; font-weight: bold; margin-bottom: 4px; color: black; }}
-                                .vulgo {{ font-size: 10px; font-style: italic; margin-bottom: 4px; color: black; }}
-                                .funcao {{ font-size: 10px; margin-bottom: 4px; color: black; }}
-                                .rg {{ font-size: 10px; border-top: 1px dashed #666; padding-top: 4px; margin-top: auto; width: 100%; color: black; }}
+                                
+                                /* Fotos e textos otimizados */
+                                .tatico-card img {{ width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 1px solid black; margin-bottom: 4px; }}
+                                .tatico-card .no-foto {{ width: 60px; height: 60px; border-radius: 50%; background: #ccc; font-size: 24px; line-height: 60px; margin-bottom: 4px; border: 1px solid black; color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                                .nome {{ font-size: 10px; font-weight: bold; margin-bottom: 2px; color: black; }}
+                                .vulgo {{ font-size: 9px; font-style: italic; margin-bottom: 2px; color: black; }}
+                                .funcao {{ font-size: 9px; margin-bottom: 2px; color: black; }}
+                                .rg {{ font-size: 9px; border-top: 1px dashed #666; padding-top: 3px; margin-top: auto; width: 100%; color: black; }}
+                                
+                                /* Força margens minúsculas na impressora */
                                 @media print {{
-                                    @page {{ margin: 10mm; }}
+                                    @page {{ margin: 5mm; }}
                                 }}
                             </style>
                         </head>
