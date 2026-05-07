@@ -95,6 +95,9 @@ def carregar_dados():
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     return df
 
+# =====================================================================
+# 2. CARGA DE DADOS (CRIMES E MÚLTIPLAS BASES NOTION)
+# =====================================================================
 @st.cache_data(ttl=600)
 def carregar_dados_notion(database_id):
     try:
@@ -122,6 +125,7 @@ def carregar_dados_notion(database_id):
             linha = {}
             for nome_coluna, dados_coluna in props.items():
                 tipo = dados_coluna.get("type")
+                
                 if tipo == "title":
                     vals = dados_coluna.get("title", [])
                     linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
@@ -131,19 +135,28 @@ def carregar_dados_notion(database_id):
                 elif tipo == "select":
                     val = dados_coluna.get("select")
                     linha[nome_coluna] = val.get("name") if val else ""
+                elif tipo == "status": # ADICIONADO: Suporte a Status
+                    val = dados_coluna.get("status")
+                    linha[nome_coluna] = val.get("name") if val else ""
                 elif tipo == "multi_select":
                     vals = dados_coluna.get("multi_select", [])
                     linha[nome_coluna] = ", ".join([v.get("name") for v in vals])
-                elif tipo == "number": linha[nome_coluna] = dados_coluna.get("number")
+                elif tipo == "number": 
+                    linha[nome_coluna] = dados_coluna.get("number")
                 elif tipo == "date":
                     val = dados_coluna.get("date")
                     linha[nome_coluna] = val.get("start") if val else ""
-                elif tipo == "checkbox": linha[nome_coluna] = dados_coluna.get("checkbox")
+                elif tipo == "checkbox": 
+                    linha[nome_coluna] = dados_coluna.get("checkbox")
+                elif tipo in ["email", "phone_number", "url"]: # ADICIONADO: Contatos
+                    linha[nome_coluna] = dados_coluna.get(tipo, "")
+                elif tipo == "people": # ADICIONADO: Pessoas
+                    pessoas = dados_coluna.get("people", [])
+                    linha[nome_coluna] = ", ".join([p.get("name", "N/I") for p in pessoas])
                 elif tipo == "relation":
+                    # O Notion não entrega texto na relação, apenas IDs. Avisamos visualmente.
                     relacoes = dados_coluna.get("relation", [])
-                    if relacoes:
-                        ids_relacionados = [r.get("id")[:8] for r in relacoes]
-                        linha[nome_coluna] = f"ID: {', '.join(ids_relacionados)}..."
+                    if relacoes: linha[nome_coluna] = "🔗 [Conexão Oculta]"
                     else: linha[nome_coluna] = ""
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
@@ -159,6 +172,7 @@ def carregar_dados_notion(database_id):
                             elif v_type == "multi_select":
                                 msel = val.get("multi_select", [])
                                 textos.append(", ".join([s.get("name", "") for s in msel]))
+                            elif v_type == "relation": textos.append("🔗 [Conexão Oculta]")
                         linha[nome_coluna] = ", ".join(filter(None, textos))
                     elif r_type == "string": linha[nome_coluna] = str(rollup.get("string", ""))
                     else: linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
@@ -172,7 +186,9 @@ def carregar_dados_notion(database_id):
                         arq = arquivos[0]
                         linha[nome_coluna] = arq.get("file", {}).get("url") or arq.get("external", {}).get("url") or arq.get("name", "")
                     else: linha[nome_coluna] = ""
-                else: linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                else: 
+                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                    
             linhas.append(linha)
         return pd.DataFrame(linhas)
     except Exception as e:
