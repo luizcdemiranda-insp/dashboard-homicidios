@@ -727,7 +727,7 @@ else:
         id_atual = mapa_ids.get(area_selecionada)
         
         if id_atual:
-            st.header(f"📓 {area_selecionada} - ORCIM")
+            st.header(f"📓 {area_selecionada} - ORCRIM")
             with st.spinner(f"Sincronizando {area_selecionada} com Notion..."):
                 df_area = carregar_dados_notion(id_atual)
                 renderizar_modulo_orcrim(df_area, area_selecionada)
