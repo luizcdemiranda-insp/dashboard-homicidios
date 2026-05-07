@@ -16,6 +16,7 @@ from io import StringIO
 import xml.etree.ElementTree as ET
 import re
 import streamlit.components.v1 as components
+import base64
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -83,8 +84,17 @@ def render_card(titulo, valor, cor):
     st.markdown(html, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. CARGA DE DADOS (ATUALIZADA PARA ACEITAR MÚLTIPLOS IDs)
+# 2. CARGA DE DADOS (CRIMES E MÚLTIPLAS BASES NOTION)
 # =====================================================================
+@st.cache_data
+def carregar_dados():
+    url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
+    df = pd.read_csv(url)
+    df.columns = [str(col).strip().upper() for col in df.columns]
+    if 'ANO' not in df.columns and 'DATA' in df.columns:
+        df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
+    return df
+
 @st.cache_data(ttl=600)
 def carregar_dados_notion(database_id):
     try:
@@ -112,7 +122,6 @@ def carregar_dados_notion(database_id):
             linha = {}
             for nome_coluna, dados_coluna in props.items():
                 tipo = dados_coluna.get("type")
-                # ... (toda a lógica de extração de tipos que já temos permanece igual) ...
                 if tipo == "title":
                     vals = dados_coluna.get("title", [])
                     linha[nome_coluna] = vals[0].get("plain_text") if vals else ""
@@ -125,84 +134,369 @@ def carregar_dados_notion(database_id):
                 elif tipo == "multi_select":
                     vals = dados_coluna.get("multi_select", [])
                     linha[nome_coluna] = ", ".join([v.get("name") for v in vals])
+                elif tipo == "number": linha[nome_coluna] = dados_coluna.get("number")
+                elif tipo == "date":
+                    val = dados_coluna.get("date")
+                    linha[nome_coluna] = val.get("start") if val else ""
+                elif tipo == "checkbox": linha[nome_coluna] = dados_coluna.get("checkbox")
+                elif tipo == "relation":
+                    relacoes = dados_coluna.get("relation", [])
+                    if relacoes:
+                        ids_relacionados = [r.get("id")[:8] for r in relacoes]
+                        linha[nome_coluna] = f"ID: {', '.join(ids_relacionados)}..."
+                    else: linha[nome_coluna] = ""
+                elif tipo == "rollup":
+                    rollup = dados_coluna.get("rollup", {})
+                    r_type = rollup.get("type")
+                    if r_type == "array":
+                        textos = []
+                        for val in rollup.get("array", []):
+                            v_type = val.get("type")
+                            if v_type in ["title", "rich_text"]: textos.append("".join([t.get("plain_text", "") for t in val.get(v_type, [])]))
+                            elif v_type == "select":
+                                sel = val.get("select")
+                                if sel: textos.append(sel.get("name", ""))
+                            elif v_type == "multi_select":
+                                msel = val.get("multi_select", [])
+                                textos.append(", ".join([s.get("name", "") for s in msel]))
+                        linha[nome_coluna] = ", ".join(filter(None, textos))
+                    elif r_type == "string": linha[nome_coluna] = str(rollup.get("string", ""))
+                    else: linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
+                elif tipo == "formula":
+                    form = dados_coluna.get("formula", {})
+                    f_type = form.get("type")
+                    linha[nome_coluna] = str(form.get(f_type, ""))
                 elif tipo == "files":
                     arquivos = dados_coluna.get("files", [])
                     if arquivos:
                         arq = arquivos[0]
                         linha[nome_coluna] = arq.get("file", {}).get("url") or arq.get("external", {}).get("url") or arq.get("name", "")
                     else: linha[nome_coluna] = ""
-                else:
-                    linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
+                else: linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
             linhas.append(linha)
         return pd.DataFrame(linhas)
     except Exception as e:
         return pd.DataFrame()
 
 # =====================================================================
-# NOVA FUNÇÃO: RENDERIZAR MÓDULO ORCRIM (CÓPIA FIEL PARA TODAS AS ÁREAS)
+# 2.6 GEOPROCESSAMENTO E MAPA (RESTAURADOS)
+# =====================================================================
+@st.cache_data(ttl=3600)
+def carregar_kml_github(url):
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200: return response.text
+        return None
+    except: return None
+
+def pagina_mapa():
+    st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
+    with st.spinner("📡 Processando base de dados central..."):
+        df = carregar_dados()
+        
+    col_lat = next((c for c in df.columns if "LATITUDE" in c.upper() or c.upper() == "LAT"), None)
+    col_lon = next((c for c in df.columns if "LONGITUDE" in c.upper() or c.upper() in ["LON", "LONG"]), None)
+
+    if col_lat and col_lon:
+        df_lat_limpa = pd.to_numeric(df[col_lat].astype(str).str.replace(',', '.'), errors='coerce')
+        df_lon_limpa = pd.to_numeric(df[col_lon].astype(str).str.replace(',', '.'), errors='coerce')
+        df_mapa = df.copy()
+        df_mapa[col_lat] = df_lat_limpa
+        df_mapa[col_lon] = df_lon_limpa
+        df_mapa = df_mapa.dropna(subset=[col_lat, col_lon])
+        
+        total_pontos = len(df_mapa)
+        limite = 1000
+        if total_pontos > limite:
+            st.warning(f"⚠️ Base massiva. Exibindo os {limite} crimes mais recentes para estabilidade.")
+            df_mapa = df_mapa.tail(limite)
+        else: st.success(f"✅ {total_pontos} pontos de ocorrência localizados.")
+
+        with st.spinner("🗺️ Renderizando motor satelital e inteligência tática..."):
+            m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
+            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=m&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Google Maps (Ruas)').add_to(m)
+            folium.TileLayer(tiles='http://mt0.google.com/vt/lyrs=y&hl=pt-BR&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(m)
+            Draw(export=False, position='topleft').add_to(m)
+
+            col_proc = next((c for c in df_mapa.columns if "PROC" in c or "RO" == c or "REGISTRO" in c), "PROCEDIMENTO")
+            col_delito = next((c for c in df_mapa.columns if "DELITO" in c or "NATUREZA" in c or "CRIME" in c), "DELITO")
+            col_circ = next((c for c in df_mapa.columns if "CIRCUNSCRI" in c or "DP" == c), "CIRCUNSCRIÇÃO")
+            col_data = next((c for c in df_mapa.columns if "DATA" in c), "DATA")
+            col_local = next((c for c in df_mapa.columns if "LOGRADOURO" in c or "LOCAL" in c or "ENDEREÇO" in c), "LOCAL")
+
+            mc = MarkerCluster(name="🔴 Ocorrências (Crimes)").add_to(m)
+            for _, row in df_mapa.iterrows():
+                html_popup = f"<div style='min-width: 220px; font-family: sans-serif;'><h4 style='margin-top: 0; margin-bottom: 5px; color: #8B0000;'>{row.get(col_proc, 'N/I')}</h4><hr style='margin: 5px 0;'><b>Delito:</b> {row.get(col_delito, 'N/I')}<br><b>Data:</b> {row.get(col_data, 'N/I')}<br><b>Circunscrição:</b> {row.get(col_circ, 'N/I')}<br><b>Local:</b> {row.get(col_local, 'N/I')}</div>"
+                folium.Marker(location=[row[col_lat], row[col_lon]], popup=folium.Popup(html_popup, max_width=350), icon=folium.Icon(color='darkred', icon='info-sign')).add_to(mc)
+
+            try:
+                camada_areas = folium.FeatureGroup(name="🔲 Territórios Criminais", show=True)
+                url_kml_github = "COLE_AQUI_O_LINK_RAW_DO_GITHUB"
+                xml_texto = carregar_kml_github(url_kml_github)
+                
+                if xml_texto:
+                    xml_texto = re.sub(r'\sxmlns="[^"]+"', '', xml_texto)
+                    xml_texto = re.sub(r'\sxmlns:\w+="[^"]+"', '', xml_texto)
+                    root = ET.fromstring(xml_texto)
+                    placemarks = root.findall('.//Placemark')
+                    
+                    if placemarks:
+                        for placemark in placemarks:
+                            nome_node = placemark.find('.//name')
+                            nome_area = nome_node.text.strip() if nome_node is not None and nome_node.text else "Área Restrita"
+                            desc_node = placemark.find('.//description')
+                            desc_text = desc_node.text if desc_node is not None and desc_node.text else ""
+                            ext_node = placemark.find('.//ExtendedData')
+                            ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
+                            texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
+                            
+                            if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: cor_area, faccao = "#E74C3C", "CV"
+                            elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: cor_area, faccao = "#3498DB", "TCP"
+                            elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: cor_area, faccao = "#F39C12", "MILÍCIA"
+                            elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca: cor_area, faccao = "#27AE60", "ADA"
+                            else: cor_area, faccao = "#95A5A6", "N/I"
+                                
+                            polygons = placemark.findall('.//Polygon')
+                            for poly in polygons:
+                                coords_node = poly.find('.//coordinates')
+                                if coords_node is not None and coords_node.text:
+                                    pontos_brutos = coords_node.text.strip().split()
+                                    coords_limpas = []
+                                    passo = 4 if len(pontos_brutos) > 1000 else (2 if len(pontos_brutos) > 300 else 1)
+                                    for pt in pontos_brutos[::passo]:
+                                        valores = pt.split(',')
+                                        if len(valores) >= 2:
+                                            try: coords_limpas.append([float(valores[1].strip()), float(valores[0].strip())]) 
+                                            except: pass
+                                    if len(coords_limpas) >= 3:
+                                        folium.Polygon(locations=coords_limpas, color=cor_area, weight=1.5, opacity=0.8, fill=True, fill_color=cor_area, fill_opacity=0.15, tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>").add_to(camada_areas)
+                        camada_areas.add_to(m)
+            except Exception as e: st.error(f"⚠️ Erro KML: {e}")
+
+            folium.LayerControl().add_to(m)
+            st_folium(m, width=1200, height=600, returned_objects=[])
+    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+
+# =====================================================================
+# NOVA FUNÇÃO: RENDERIZAR MÓDULO ORCRIM (GENÉRICA PARA TODAS AS ÁREAS)
 # =====================================================================
 def renderizar_modulo_orcrim(df_notion, nome_area):
     if not df_notion.empty:
-        # 1. Sistema de Busca Único
         col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
+        
         terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
         nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
 
+        # Chaves dinâmicas baseadas no nome_area evitam conflito entre as abas
+        key_terr = f"t_busca_{nome_area}"
+        key_alvo = f"a_busca_{nome_area}"
+        
+        if key_terr not in st.session_state: st.session_state[key_terr] = ""
+        if key_alvo not in st.session_state: st.session_state[key_alvo] = ""
+        
+        def limpar_buscas(): 
+            st.session_state[key_terr] = ""
+            st.session_state[key_alvo] = ""
+
+        alvo_desativado = bool(st.session_state[key_terr])
+        terr_desativado = bool(st.session_state[key_alvo])
+
         col_t, col_b, col_btn, _ = st.columns([3, 3, 1, 3])
-        terr_sel = col_t.selectbox(f"Território ({nome_area}):", [""] + terr_disponiveis, key=f"t_{nome_area}")
-        alvo_sel = col_b.selectbox(f"Qualificado ({nome_area}):", [""] + nomes_disponiveis, key=f"a_{nome_area}")
+        terr_selecionado = col_t.selectbox(f"Território ({nome_area}):", [""] + terr_disponiveis, key=key_terr, disabled=terr_desativado)
+        alvo_selecionado = col_b.selectbox(f"Qualificado ({nome_area}):", [""] + nomes_disponiveis, key=key_alvo, disabled=alvo_desativado)
+        
         col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        if col_btn.button("🧹 Limpar", key=f"btn_{nome_area}"): st.rerun()
+        col_btn.button("🧹 Limpar", key=f"btn_{nome_area}", on_click=limpar_buscas)
 
         st.write("---")
         aba_org, aba_dos, aba_tab = st.tabs(["🕸️ ORGANOGRAMA", "📇 DOSSIÊ TÁTICO", "📋 TABELA GERAL"])
 
         with aba_org:
-            # Aqui entra toda aquela lógica do HTML/CSS e do Botão de Impressão JS 
-            # que otimizamos na última conversa. O código usará o 'df_notion' da área atual.
-            # (Vou omitir o bloco HTML gigante para encurtar, mas você mantém o que já temos)
-            atuacao = alvo_sel if alvo_sel else terr_sel
-            if atuacao:
-                st.success(f"Gerando Inteligência para: {atuacao}")
-                # ... (Insira aqui a lógica de construção do Organograma HTML/JS que já validamos) ...
-            else:
-                st.info("Selecione um parâmetro para gerar o organograma.")
+            atuacao_alvo = ""
+            if alvo_selecionado:
+                dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
+            elif terr_selecionado:
+                atuacao_alvo = str(terr_selecionado).strip()
+
+            if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
+                df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
+                def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
+                def get_nivel(funcao):
+                    f_up = str(funcao).upper()
+                    if "DONO" in f_up: return 1, "DONO"
+                    elif "FRENTE" in f_up: return 2, "FRENTE"
+                    elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
+                    else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
+                
+                orgs = df_area["Organização"].dropna().unique().tolist()
+                
+                st.markdown("""
+                <style>
+                .org-header { background-color:#1E2130; padding:15px; border-radius:10px; margin-bottom:15px; text-align:center; }
+                .org-header h2 { color:#ffffff; margin:0; font-family: sans-serif; }
+                .orcrim-box { border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:20px; font-family: sans-serif; }
+                .orcrim-box h3 { text-align:center; color:#ff4b4b; margin-top:0; }
+                .nivel-header { background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px; font-family: sans-serif; }
+                .cards-container { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+                .tatico-card { background-color:#4a4f63; border:2px solid #333333; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair; transition: transform 0.2s; font-family: sans-serif; }
+                .tatico-card:hover { transform: scale(1.05); z-index: 10; }
+                .tatico-card.alvo { background-color:#E74C3C; border-color:#ffffff; }
+                .tatico-card img { width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid #fff; }
+                .tatico-card .no-foto { width:135px; height:135px; border-radius:50%; background:#333; font-size:60px; line-height:135px; margin-bottom:6px; border:2px solid #fff; text-align:center; color:white; }
+                .tatico-card .nome { color:white; font-size:13px; font-weight:bold; line-height:1.2; margin-bottom: 2px; }
+                .tatico-card .vulgo { color:#F1C40F; font-size:12px; font-style:italic; margin-bottom: 2px; }
+                .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
+                .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
+                </style>
+                """, unsafe_allow_html=True)
+
+                html_tela = f"<div class='org-header'><h2>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                html_print_body = f"<div class='org-header'><h2>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
+                
+                for org in orgs:
+                    org_cl = clean_text(org)
+                    if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
+                    
+                    html_tela += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
+                    html_print_body += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
+                    
+                    df_org = df_area[df_area["Organização"] == org]
+                    ranks = {}
+                    for _, r in df_org.iterrows():
+                        func = clean_text(r.get("Função", ""))
+                        nome = clean_text(r.get("Nome", ""))
+                        foto = r.get("Foto", "")
+                        vulgo = clean_text(r.get("Vulgo", "N/I"))
+                        rg = clean_text(r.get("RG", "N/I"))
+                        if nome.upper() in ["NAN", "N/I", "", "-"]: continue
+                        idx, nome_nivel = get_nivel(func)
+                        if idx not in ranks: ranks[idx] = []
+                        ranks[idx].append((nome, func, foto, vulgo, rg)) 
+
+                    for rank_idx in sorted(ranks.keys()):
+                        nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
+                        html_tela += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
+                        html_print_body += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
+                        for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
+                            is_alvo = (p_nome == clean_text(alvo_selecionado))
+                            card_class = "tatico-card alvo" if is_alvo else "tatico-card"
+                            img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
+                            html_card = f"<div class='{card_class}'>{img_tag}<div class='nome'>{p_nome}</div>"
+                            if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
+                            html_card += f"<div class='funcao'>({p_func})</div><div class='rg'><b>RG:</b> {p_rg}</div></div>"
+                            html_tela += html_card
+                            html_print_body += html_card
+                        html_tela += "</div>"
+                        html_print_body += "</div>"
+                    html_tela += "</div>"
+                    html_print_body += "</div>"
+
+                html_print_document = f"""<!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Organograma - {atuacao_alvo.upper()}</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; padding: 0; margin: 0; background: white; color: black; }}
+                        .org-header h2 {{ text-align: center; border-bottom: 2px solid black; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; color: black; font-size: 16px; }}
+                        .orcrim-box {{ border: 2px solid black; padding: 8px; margin-bottom: 10px; border-radius: 6px; page-break-inside: auto; }}
+                        .orcrim-box h3 {{ text-align: center; margin-top: 0; font-size: 14px; text-transform: uppercase; color: black; margin-bottom: 6px; }}
+                        .nivel-header {{ background-color: #f0f0f0; border: 1px solid black; padding: 4px; margin: 6px 0; text-align: center; font-weight: bold; font-size: 12px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: black; }}
+                        .cards-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }}
+                        .tatico-card {{ border: 2px solid #333; padding: 6px; width: 120px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; box-sizing: border-box; }}
+                        .tatico-card.alvo {{ border: 3px solid #E74C3C; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                        .tatico-card img {{ width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 1px solid black; margin-bottom: 4px; }}
+                        .tatico-card .no-foto {{ width: 60px; height: 60px; border-radius: 50%; background: #ccc; font-size: 24px; line-height: 60px; margin-bottom: 4px; border: 1px solid black; color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                        .nome {{ font-size: 10px; font-weight: bold; margin-bottom: 2px; color: black; }}
+                        .vulgo {{ font-size: 9px; font-style: italic; margin-bottom: 2px; color: black; }}
+                        .funcao {{ font-size: 9px; margin-bottom: 2px; color: black; }}
+                        .rg {{ font-size: 9px; border-top: 1px dashed #666; padding-top: 3px; margin-top: auto; width: 100%; color: black; }}
+                        @media print {{ @page {{ margin: 5mm; }} }}
+                    </style>
+                </head>
+                <body onload="setTimeout(function(){{ window.print(); }}, 500);">
+                    {html_print_body}
+                </body>
+                </html>
+                """
+                
+                b64 = base64.b64encode(html_print_document.encode('utf-8')).decode('utf-8')
+                js_print_code = f"""
+                <div style="display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;">
+                    <button onclick="abrirImpressao()" style="background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">
+                        🖨️ Imprimir Organograma Limpo
+                    </button>
+                </div>
+                <script>
+                function abrirImpressao() {{
+                    var b64Data = "{b64}";
+                    var decodedData = decodeURIComponent(atob(b64Data).split('').map(function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join(''));
+                    var w = window.open('', '_blank');
+                    w.document.write(decodedData);
+                    w.document.close();
+                }}
+                </script>
+                """
+                components.html(js_print_code, height=55)
+                st.markdown(html_tela, unsafe_allow_html=True)
+            else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
 
         with aba_dos:
-            if alvo_sel:
-                # Exibe o Dossiê Tático do alvo selecionado
-                dados = df_notion[df_notion["Nome"] == alvo_sel].iloc[0]
-                # ... (Lógica de exibição de foto e info do alvo) ...
-            else: st.info("Selecione um alvo.")
+            if alvo_selecionado:
+                dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
+                col_foto, col_info = st.columns([1, 2])
+                with col_foto:
+                    foto_url = dados_alvo.get("Foto", "")
+                    if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
+                    else: st.info("👤 Sem foto no arquivo.")
+                with col_info:
+                    vulgo = dados_alvo.get("Vulgo", "N/I")
+                    st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
+                    st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
+                    st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
+                    st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
+                    st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
+                    st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
+                    st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
+                if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
+                    st.write("---")
+                    st.markdown("#### 📝 Informe Analítico")
+                    st.warning(dados_alvo.get("Informe", ""))
+            else: st.info("Aguardando seleção de um qualificado no buscador acima.")
 
         with aba_tab:
-            st.dataframe(df_notion, use_container_width=True)
+            ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
+            c_ex = [c for c in ordem_ideal if c in df_notion.columns]
+            c_extra = [c for c in df_notion.columns if c not in c_ex]
+            df_notion = df_notion[c_ex + c_extra]
+
+            with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
+                col_at = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), None)
+                col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
+                col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
+                
+                df_filt = df_notion.copy()
+                c1, c2, c3 = st.columns(3)
+                
+                if col_at:
+                    sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist(), key=f"sel_at_{nome_area}")
+                    if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
+                if col_fn:
+                    sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist(), key=f"sel_fn_{nome_area}")
+                    if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
+                if col_org:
+                    sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist(), key=f"sel_org_{nome_area}")
+                    if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
+
+            st.write("---")
+            cfg = {}
+            for c in df_filt.columns:
+                if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
+                elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
+            st.dataframe(df_filt, column_config=cfg, use_container_width=True)
     else:
         st.error(f"Erro ao sincronizar base de dados da {nome_area}. Verifique a conexão com o Notion.")
-
-# =====================================================================
-# NOVO BLOCO DE NAVEGAÇÃO ORCRIM (DYNAMIC AREA SWITCHER)
-# =====================================================================
-elif "ORCRIM" in menu:
-    area_selecionada = str(sub_menu_orcrim) # Pega ÁREA 1, ÁREA 2, etc.
-    
-    # Mapeamento Dinâmico de IDs vindo dos Secrets
-    mapa_ids = {
-        "ÁREA 1": st.secrets["notion"].get("database_id_a1"),
-        "ÁREA 2": st.secrets["notion"].get("database_id_a2"),
-        "ÁREA 3": st.secrets["notion"].get("database_id_a3"),
-        "ÁREA 4": st.secrets["notion"].get("database_id_a4")
-    }
-    
-    id_atual = mapa_ids.get(area_selecionada)
-    
-    if id_atual:
-        st.header(f"📓 {area_selecionada} - ORCIM")
-        with st.spinner(f"Sincronizando {area_selecionada} com Notion..."):
-            df_area = carregar_dados_notion(id_atual)
-            renderizar_modulo_orcrim(df_area, area_selecionada)
-    else:
-        st.error(f"O ID da {area_selecionada} não foi configurado nos Segredos do Sistema.")
 
 # =====================================================================
 # 3. INTERFACE DE ACESSO
@@ -235,23 +529,18 @@ def tela_acesso():
             if st.button("Acessar Painel"):
                 with st.spinner("Autenticando..."):
                     df_users = carregar_usuarios()
-                    
                     if not df_users.empty:
                         senha_hash = gerar_hash(senha_login)
                         user_match = df_users[(df_users['MATRICULA'] == str(mat_login).strip()) & (df_users['SENHA'] == senha_hash)]
-                        
                         if not user_match.empty:
                             if str(user_match.iloc[0]['STATUS']).strip().upper() == 'APROVADO':
                                 st.session_state.logado = True
                                 st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
                                 st.session_state.user_nome = user_match.iloc[0]['NOME']
                                 st.rerun()
-                            else: 
-                                st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
-                        else: 
-                            st.error("Matrícula ou Senha incorretos.")
-                    else:
-                        st.error("Falha ao contatar o servidor de credenciais. Tente novamente.")
+                            else: st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
+                        else: st.error("Matrícula ou Senha incorretos.")
+                    else: st.error("Falha ao contatar o servidor de credenciais. Tente novamente.")
 
         with aba_cadastro:
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
@@ -353,9 +642,7 @@ else:
         
     menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
 
-    # Reseta o aviso caso o usuário saia do menu ORCRIM
-    if "ORCRIM" not in menu:
-        st.session_state.toast_orcrim_shown = False
+    if "ORCRIM" not in menu: st.session_state.toast_orcrim_shown = False
 
     sub_menu_orcrim = None
     if "ORCRIM" in menu:
@@ -371,19 +658,13 @@ else:
     # CABEÇALHO - SISTEMA MERCÚRIO
     # =====================================================================
     col_logos, col_titulo = st.columns([1.5, 4])
-    
     with col_logos:
         logos_ativos = []
-        try: 
-            open("logo1.png")
-            logos_ativos.append("logo1.png")
+        try: open("logo1.png"); logos_ativos.append("logo1.png")
         except: pass
-        try: 
-            open("logo2.png")
-            logos_ativos.append("logo2.png")
+        try: open("logo2.png"); logos_ativos.append("logo2.png")
         except: pass
-        if logos_ativos:
-            st.image(logos_ativos, width=85)
+        if logos_ativos: st.image(logos_ativos, width=85)
             
     with col_titulo:
         st.markdown("<h1 style='text-align: left; margin-top: 10px;'>🛡️ SISTEMA MERCÚRIO</h1>", unsafe_allow_html=True)
@@ -396,13 +677,8 @@ else:
         st.header("📊 VISÃO GERAL")
         try:
             data_atualizacao = df.iloc[-1, 5] 
-            st.markdown(f"""
-                <div style='color:#2ecc71; font-size:11px; font-style:italic; margin-top:-15px; margin-bottom:15px;'>
-                    Base atualizada em: {data_atualizacao}
-                </div>
-            """, unsafe_allow_html=True)
-        except Exception as e:
-            pass 
+            st.markdown(f"<div style='color:#2ecc71; font-size:11px; font-style:italic; margin-top:-15px; margin-bottom:15px;'>Base atualizada em: {data_atualizacao}</div>", unsafe_allow_html=True)
+        except: pass 
 
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
@@ -435,280 +711,28 @@ else:
             else: gerar_dashboard(df_filtrado) 
         else: st.warning("⚠️ Selecione pelo menos um ano.")
 
+    # =====================================================================
+    # NAVEGAÇÃO DINÂMICA DE ÁREAS (1, 2, 3, 4)
+    # =====================================================================
     elif "ORCRIM" in menu:
         area_selecionada = str(sub_menu_orcrim)
-        if area_selecionada == "ÁREA 1":
-            st.header("📓 ÁREA 1 - ORCIM")
-            
-            with st.spinner("Sincronizando Central..."):
-                df_notion = carregar_dados_notion()
-                
-            if not df_notion.empty:
-                if not st.session_state.toast_orcrim_shown:
-                    st.toast(f"{len(df_notion)} registros ativos sincronizados com sucesso.", icon="✅")
-                    st.session_state.toast_orcrim_shown = True
-                
-                if "alvo_busca" not in st.session_state: st.session_state.alvo_busca = ""
-                if "terr_busca" not in st.session_state: st.session_state.terr_busca = ""
-                
-                def limpar_buscas(): 
-                    st.session_state.alvo_busca = ""
-                    st.session_state.terr_busca = ""
-
-                col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
-                
-                terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
-                nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
-
-                alvo_desativado = bool(st.session_state.terr_busca)
-                terr_desativado = bool(st.session_state.alvo_busca)
-
-                col_terr, col_busca, col_btn, _ = st.columns([3, 3, 1, 3])
-                
-                terr_selecionado = col_terr.selectbox("Busca por território:", [""] + terr_disponiveis, key="terr_busca", disabled=terr_desativado)
-                alvo_selecionado = col_busca.selectbox("Busca por qualificado:", [""] + nomes_disponiveis, key="alvo_busca", disabled=alvo_desativado)
-                
-                col_btn.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                col_btn.button("🧹 Limpar", on_click=limpar_buscas)
-                
-                st.write("---")
-                
-                aba_organograma, aba_dossie, aba_tabela = st.tabs(["🕸️ ORGANOGRAMA", "📇 DOSSIÊ TÁTICO", "📋 TABELA GERAL"])
-                
-                with aba_organograma:
-                    atuacao_alvo = ""
-                    
-                    if alvo_selecionado:
-                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        atuacao_alvo = str(dados_alvo.get(col_territorio, "")).strip()
-                    elif terr_selecionado:
-                        atuacao_alvo = str(terr_selecionado).strip()
-
-                    if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
-                        df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
-                        
-                        def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
-
-                        def get_nivel(funcao):
-                            f_up = str(funcao).upper()
-                            if "DONO" in f_up: return 1, "DONO"
-                            elif "FRENTE" in f_up: return 2, "FRENTE"
-                            elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
-                            else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
-                        
-                        orgs = df_area["Organização"].dropna().unique().tolist()
-                        
-                        # ==========================================================
-                        # 1. ESTILOS APENAS PARA A TELA (MODO ESCURO INTOCADO)
-                        # ==========================================================
-                        st.markdown("""
-                        <style>
-                        .org-header { background-color:#1E2130; padding:15px; border-radius:10px; margin-bottom:15px; text-align:center; }
-                        .org-header h2 { color:#ffffff; margin:0; font-family: sans-serif; }
-                        .orcrim-box { border:2px solid #ff4b4b; padding:15px; border-radius:10px; margin-bottom:20px; font-family: sans-serif; }
-                        .orcrim-box h3 { text-align:center; color:#ff4b4b; margin-top:0; }
-                        .nivel-header { background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px; font-family: sans-serif; }
-                        .cards-container { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
-                        .tatico-card { background-color:#4a4f63; border:2px solid #333333; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair; transition: transform 0.2s; font-family: sans-serif; }
-                        .tatico-card:hover { transform: scale(1.05); z-index: 10; }
-                        .tatico-card.alvo { background-color:#E74C3C; border-color:#ffffff; }
-                        .tatico-card img { width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid #fff; }
-                        .tatico-card .no-foto { width:135px; height:135px; border-radius:50%; background:#333; font-size:60px; line-height:135px; margin-bottom:6px; border:2px solid #fff; text-align:center; color:white; }
-                        .tatico-card .nome { color:white; font-size:13px; font-weight:bold; line-height:1.2; margin-bottom: 2px; }
-                        .tatico-card .vulgo { color:#F1C40F; font-size:12px; font-style:italic; margin-bottom: 2px; }
-                        .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
-                        .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
-                        </style>
-                        """, unsafe_allow_html=True)
-
-                        # ==========================================================
-                        # 2. CONSTRUTORES SEPARADOS (GERA TELA E GERA IMPRESSÃO LIMPA)
-                        # ==========================================================
-                        html_tela = f"<div class='org-header'><h2>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
-                        html_print_body = f"<div class='org-header'><h2>🏢 TERRITÓRIO: {atuacao_alvo.upper()}</h2></div>"
-                        
-                        for org in orgs:
-                            org_cl = clean_text(org)
-                            if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
-                            
-                            html_tela += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
-                            html_print_body += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
-                            
-                            df_org = df_area[df_area["Organização"] == org]
-                            ranks = {}
-                            for _, r in df_org.iterrows():
-                                func = clean_text(r.get("Função", ""))
-                                nome = clean_text(r.get("Nome", ""))
-                                foto = r.get("Foto", "")
-                                vulgo = clean_text(r.get("Vulgo", "N/I"))
-                                rg = clean_text(r.get("RG", "N/I"))
-                                
-                                if nome.upper() in ["NAN", "N/I", "", "-"]: continue
-                                idx, nome_nivel = get_nivel(func)
-                                if idx not in ranks: ranks[idx] = []
-                                ranks[idx].append((nome, func, foto, vulgo, rg)) 
-
-                            for rank_idx in sorted(ranks.keys()):
-                                nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
-                                
-                                html_tela += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
-                                html_print_body += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
-                                
-                                for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
-                                    is_alvo = (p_nome == clean_text(alvo_selecionado))
-                                    card_class = "tatico-card alvo" if is_alvo else "tatico-card"
-                                    
-                                    img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
-                                    
-                                    # O conteúdo do card é exatamente o mesmo para ambos!
-                                    html_card = f"<div class='{card_class}'>{img_tag}"
-                                    html_card += f"<div class='nome'>{p_nome}</div>"
-                                    if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
-                                    html_card += f"<div class='funcao'>({p_func})</div>"
-                                    html_card += f"<div class='rg'><b>RG:</b> {p_rg}</div></div>"
-                                    
-                                    html_tela += html_card
-                                    html_print_body += html_card
-                                    
-                                html_tela += "</div>"
-                                html_print_body += "</div>"
-                            html_tela += "</div>"
-                            html_print_body += "</div>"
-
-                        # ==========================================================
-                        # 3. MÁGICA: DOCUMENTO ISOLADO VIA JAVASCRIPT/BASE64
-                        # ==========================================================
-                        import base64
-                        
-                        # Criamos uma página HTML do zero absoluta só para impressão
-                        html_print_document = f"""<!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta charset="utf-8">
-                            <title>Organograma - {atuacao_alvo.upper()}</title>
-                            <style>
-                                /* Zera os espaços fantasmas e define uma margem mínima */
-                                body {{ font-family: Arial, sans-serif; padding: 0; margin: 0; background: white; color: black; }}
-                                
-                                /* Cabeçalhos mais compactos */
-                                .org-header h2 {{ text-align: center; border-bottom: 2px solid black; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; color: black; font-size: 16px; }}
-                                .orcrim-box {{ border: 2px solid black; padding: 8px; margin-bottom: 10px; border-radius: 6px; page-break-inside: auto; }}
-                                .orcrim-box h3 {{ text-align: center; margin-top: 0; font-size: 14px; text-transform: uppercase; color: black; margin-bottom: 6px; }}
-                                
-                                /* Barra de hierarquia fininha */
-                                .nivel-header {{ background-color: #f0f0f0; border: 1px solid black; padding: 4px; margin: 6px 0; text-align: center; font-weight: bold; font-size: 12px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: black; }}
-                                
-                                /* Cards espremidos inteligentemente */
-                                .cards-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }}
-                                .tatico-card {{ border: 2px solid #333; padding: 6px; width: 120px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; box-sizing: border-box; }}
-                                .tatico-card.alvo {{ border: 3px solid #E74C3C; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                                
-                                /* Fotos e textos otimizados */
-                                .tatico-card img {{ width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 1px solid black; margin-bottom: 4px; }}
-                                .tatico-card .no-foto {{ width: 60px; height: 60px; border-radius: 50%; background: #ccc; font-size: 24px; line-height: 60px; margin-bottom: 4px; border: 1px solid black; color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                                .nome {{ font-size: 10px; font-weight: bold; margin-bottom: 2px; color: black; }}
-                                .vulgo {{ font-size: 9px; font-style: italic; margin-bottom: 2px; color: black; }}
-                                .funcao {{ font-size: 9px; margin-bottom: 2px; color: black; }}
-                                .rg {{ font-size: 9px; border-top: 1px dashed #666; padding-top: 3px; margin-top: auto; width: 100%; color: black; }}
-                                
-                                /* Força margens minúsculas na impressora */
-                                @media print {{
-                                    @page {{ margin: 5mm; }}
-                                }}
-                            </style>
-                        </head>
-                        <body onload="setTimeout(function(){{ window.print(); }}, 500);">
-                            {html_print_body}
-                        </body>
-                        </html>
-                        """
-                        
-                        b64 = base64.b64encode(html_print_document.encode('utf-8')).decode('utf-8')
-                        
-                        js_print_code = f"""
-                        <div style="display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;">
-                            <button onclick="abrirImpressao()" style="background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">
-                                🖨️ Imprimir Organograma Limpo
-                            </button>
-                        </div>
-                        <script>
-                        function abrirImpressao() {{
-                            var b64Data = "{b64}";
-                            // Descompacta e previne erros de acentuação no navegador
-                            var decodedData = decodeURIComponent(atob(b64Data).split('').map(function(c) {{
-                                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                            }}).join(''));
-                            var w = window.open('', '_blank');
-                            w.document.write(decodedData);
-                            w.document.close();
-                        }}
-                        </script>
-                        """
-                        
-                        # Exibe o botão via JS e exibe o painel na tela logo abaixo!
-                        components.html(js_print_code, height=55)
-                        st.markdown(html_tela, unsafe_allow_html=True)
-                        
-                    else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
-
-                with aba_dossie:
-                    if alvo_selecionado:
-                        dados_alvo = df_notion[df_notion["Nome"] == alvo_selecionado].iloc[0]
-                        col_foto, col_info = st.columns([1, 2])
-                        with col_foto:
-                            foto_url = dados_alvo.get("Foto", "")
-                            if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
-                            else: st.info("👤 Sem foto no arquivo.")
-                                
-                        with col_info:
-                            vulgo = dados_alvo.get("Vulgo", "N/I")
-                            st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
-                            st.markdown(f"**RG:** {dados_alvo.get('RG', 'N/I')}")
-                            st.markdown(f"**Organização:** {dados_alvo.get('Organização', 'N/I')}")
-                            st.markdown(f"**Função / Hierarquia:** {dados_alvo.get('Função', 'N/I')}")
-                            st.markdown(f"**Área de Atuação:** {dados_alvo.get(col_territorio, 'N/I')}")
-                            st.markdown(f"**Situação Atual:** {dados_alvo.get('Situação', 'N/I')}")
-                            st.markdown(f"**Redes Sociais Monitoradas:** {dados_alvo.get('Rede social', 'N/I')}")
-                            
-                        if str(dados_alvo.get("Informe", "")).strip() and str(dados_alvo.get("Informe", "")) != "nan":
-                            st.write("---")
-                            st.markdown("#### 📝 Informe Analítico")
-                            st.warning(dados_alvo.get("Informe", ""))
-                    else:
-                        st.info("Aguardando seleção de um qualificado no buscador acima.")
-                
-                with aba_tabela:
-                    ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
-                    c_ex = [c for c in ordem_ideal if c in df_notion.columns]
-                    c_extra = [c for c in df_notion.columns if c not in c_ex]
-                    df_notion = df_notion[c_ex + c_extra]
-
-                    with st.expander("🔍 FILTROS DA TABELA GERAL", expanded=False):
-                        col_at = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), None)
-                        col_fn = next((c for c in df_notion.columns if "FUNÇÃO" in c.upper() or "FUNCAO" in c.upper()), None)
-                        col_org = next((c for c in df_notion.columns if "ORGANIZAÇÃO" in c.upper() or "ORCRIM" in c.upper()), None)
-                        
-                        df_filt = df_notion.copy()
-                        c1, c2, c3 = st.columns(3)
-                        
-                        if col_at:
-                            sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist())
-                            if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
-                        if col_fn:
-                            sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist())
-                            if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
-                        if col_org:
-                            sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist())
-                            if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
-
-                    st.write("---")
-                    cfg = {}
-                    for c in df_filt.columns:
-                        if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
-                        elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
-                    st.dataframe(df_filt, column_config=cfg, use_container_width=True)
-            else: st.warning("Sem dados.")
-        else: st.info(f"O painel da {area_selecionada} está em estruturação.")
+        
+        mapa_ids = {
+            "ÁREA 1": st.secrets["notion"].get("database_id_a1"),
+            "ÁREA 2": st.secrets["notion"].get("database_id_a2"),
+            "ÁREA 3": st.secrets["notion"].get("database_id_a3"),
+            "ÁREA 4": st.secrets["notion"].get("database_id_a4")
+        }
+        
+        id_atual = mapa_ids.get(area_selecionada)
+        
+        if id_atual:
+            st.header(f"📓 {area_selecionada} - ORCIM")
+            with st.spinner(f"Sincronizando {area_selecionada} com Notion..."):
+                df_area = carregar_dados_notion(id_atual)
+                renderizar_modulo_orcrim(df_area, area_selecionada)
+        else:
+            st.error(f"⚠️ O ID da {area_selecionada} não foi configurado nos Segredos do Sistema. Adicione 'database_id_aX' no secrets.toml")
 
     elif "MAPA" in menu:
         pagina_mapa()
