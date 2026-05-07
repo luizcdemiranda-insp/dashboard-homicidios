@@ -746,6 +746,13 @@ else:
             st.header(f"📓 {area_selecionada} - ORCRIM")
             with st.spinner(f"Sincronizando {area_selecionada} com Notion..."):
                 df_area = carregar_dados_notion(id_atual)
+                
+                # 🚨 CÓDIGO DE RAIO-X (ADICIONE ESTAS 3 LINHAS) 🚨
+                with st.expander("🛠️ DEBUG: RAIO-X DA BASE DE DADOS", expanded=True):
+                    st.write("Colunas encontradas pelo Python:", df_area.columns.tolist())
+                    st.dataframe(df_area)
+                # ------------------------------------------------
+                
                 renderizar_modulo_orcrim(df_area, area_selecionada)
         else:
             st.error(f"⚠️ O ID da {area_selecionada} não foi configurado nos Segredos do Sistema. Adicione 'database_id_aX' no secrets.toml")
