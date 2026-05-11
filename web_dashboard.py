@@ -95,9 +95,6 @@ def carregar_dados():
         df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
     return df
 
-# =====================================================================
-# 2. CARGA DE DADOS (CRIMES E MÚLTIPLAS BASES NOTION)
-# =====================================================================
 @st.cache_data(ttl=600)
 def carregar_dados_notion(database_id):
     try:
@@ -135,7 +132,7 @@ def carregar_dados_notion(database_id):
                 elif tipo == "select":
                     val = dados_coluna.get("select")
                     linha[nome_coluna] = val.get("name") if val else ""
-                elif tipo == "status": # ADICIONADO: Suporte a Status
+                elif tipo == "status": 
                     val = dados_coluna.get("status")
                     linha[nome_coluna] = val.get("name") if val else ""
                 elif tipo == "multi_select":
@@ -148,13 +145,12 @@ def carregar_dados_notion(database_id):
                     linha[nome_coluna] = val.get("start") if val else ""
                 elif tipo == "checkbox": 
                     linha[nome_coluna] = dados_coluna.get("checkbox")
-                elif tipo in ["email", "phone_number", "url"]: # ADICIONADO: Contatos
+                elif tipo in ["email", "phone_number", "url"]:
                     linha[nome_coluna] = dados_coluna.get(tipo, "")
-                elif tipo == "people": # ADICIONADO: Pessoas
+                elif tipo == "people":
                     pessoas = dados_coluna.get("people", [])
                     linha[nome_coluna] = ", ".join([p.get("name", "N/I") for p in pessoas])
                 elif tipo == "relation":
-                    # O Notion não entrega texto na relação, apenas IDs. Avisamos visualmente.
                     relacoes = dados_coluna.get("relation", [])
                     if relacoes: linha[nome_coluna] = "🔗 [Conexão Oculta]"
                     else: linha[nome_coluna] = ""
@@ -355,7 +351,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 .orcrim-box h3 { text-align:center; color:#ff4b4b; margin-top:0; }
                 .nivel-header { background-color:#2d3446; padding:6px; border-radius:5px; margin-top:15px; margin-bottom:10px; text-align:center; color:#F1C40F; font-weight:bold; font-size:13px; letter-spacing:1px; font-family: sans-serif; }
                 .cards-container { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
-                .tatico-card { background-color:#4a4f63; border:2px solid #333333; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair; transition: transform 0.2s; font-family: sans-serif; }
+                .tatico-card { position: relative; background-color:#4a4f63; border:2px solid #333333; border-radius:8px; padding:15px 10px; min-width:180px; max-width:240px; flex: 1 1 auto; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: crosshair; transition: transform 0.2s; font-family: sans-serif; }
                 .tatico-card:hover { transform: scale(1.05); z-index: 10; }
                 .tatico-card.alvo { background-color:#E74C3C; border-color:#ffffff; }
                 .tatico-card img { width:135px; height:135px; border-radius:50%; object-fit:cover; margin-bottom:6px; border:2px solid #fff; }
@@ -364,6 +360,8 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 .tatico-card .vulgo { color:#F1C40F; font-size:12px; font-style:italic; margin-bottom: 2px; }
                 .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
                 .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
+                
+                .carimbo-procurado { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
                 </style>
                 """, unsafe_allow_html=True)
 
@@ -385,22 +383,30 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         foto = r.get("Foto", "")
                         vulgo = clean_text(r.get("Vulgo", "N/I"))
                         rg = clean_text(r.get("RG", "N/I"))
+                        situacao = clean_text(r.get("Situação", ""))
+                        
                         if nome.upper() in ["NAN", "N/I", "", "-"]: continue
                         idx, nome_nivel = get_nivel(func)
                         if idx not in ranks: ranks[idx] = []
-                        ranks[idx].append((nome, func, foto, vulgo, rg)) 
+                        ranks[idx].append((nome, func, foto, vulgo, rg, situacao)) 
 
                     for rank_idx in sorted(ranks.keys()):
                         nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
                         html_tela += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
                         html_print_body += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
-                        for p_nome, p_func, p_foto, p_vulgo, p_rg in ranks[rank_idx]:
+                        for p_nome, p_func, p_foto, p_vulgo, p_rg, p_situacao in ranks[rank_idx]:
                             is_alvo = (p_nome == clean_text(alvo_selecionado))
                             card_class = "tatico-card alvo" if is_alvo else "tatico-card"
+                            
                             img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
-                            html_card = f"<div class='{card_class}'>{img_tag}<div class='nome'>{p_nome}</div>"
+                            
+                            tag_procurado = "<div class='carimbo-procurado'>PROCURADO</div>" if "PROCURADO" in str(p_situacao).upper() else ""
+                            
+                            html_card = f"<div class='{card_class}'>{tag_procurado}{img_tag}<div class='nome'>{p_nome}</div>"
+                            
                             if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
                             html_card += f"<div class='funcao'>({p_func})</div><div class='rg'><b>RG:</b> {p_rg}</div></div>"
+                            
                             html_tela += html_card
                             html_print_body += html_card
                         html_tela += "</div>"
@@ -408,7 +414,6 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                     html_tela += "</div>"
                     html_print_body += "</div>"
 
-                # Alterámos o setTimeout para 2000ms (2 segundos) para garantir o carregamento das fotos
                 html_print_document = f"""<!DOCTYPE html>
                 <html>
                 <head>
@@ -421,7 +426,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         .orcrim-box h3 {{ text-align: center; margin-top: 0; font-size: 14px; text-transform: uppercase; color: black; margin-bottom: 6px; }}
                         .nivel-header {{ background-color: #f0f0f0; border: 1px solid black; padding: 4px; margin: 6px 0; text-align: center; font-weight: bold; font-size: 12px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: black; }}
                         .cards-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }}
-                        .tatico-card {{ border: 2px solid #333; padding: 6px; width: 120px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; box-sizing: border-box; }}
+                        .tatico-card {{ position: relative; border: 2px solid #333; padding: 6px; width: 120px; text-align: center; border-radius: 6px; break-inside: avoid; page-break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: white; box-sizing: border-box; }}
                         .tatico-card.alvo {{ border: 3px solid #E74C3C; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                         .tatico-card img {{ width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 1px solid black; margin-bottom: 4px; }}
                         .tatico-card .no-foto {{ width: 60px; height: 60px; border-radius: 50%; background: #ccc; font-size: 24px; line-height: 60px; margin-bottom: 4px; border: 1px solid black; color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
@@ -429,6 +434,9 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         .vulgo {{ font-size: 9px; font-style: italic; margin-bottom: 2px; color: black; }}
                         .funcao {{ font-size: 9px; margin-bottom: 2px; color: black; }}
                         .rg {{ font-size: 9px; border-top: 1px dashed #666; padding-top: 3px; margin-top: auto; width: 100%; color: black; }}
+                        
+                        .carimbo-procurado {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                        
                         @media print {{ @page {{ margin: 5mm; }} }}
                     </style>
                 </head>
@@ -440,7 +448,6 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 
                 b64 = base64.b64encode(html_print_document.encode('utf-8')).decode('utf-8')
                 
-                # Novo JS utilizando o motor Blob (Imune a falhas de memória)
                 js_print_code = f"""
                 <div style="display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;">
                     <button onclick="abrirImpressao()" style="background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">
