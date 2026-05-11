@@ -408,6 +408,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                     html_tela += "</div>"
                     html_print_body += "</div>"
 
+                # Alterámos o setTimeout para 2000ms (2 segundos) para garantir o carregamento das fotos
                 html_print_document = f"""<!DOCTYPE html>
                 <html>
                 <head>
@@ -438,6 +439,8 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 """
                 
                 b64 = base64.b64encode(html_print_document.encode('utf-8')).decode('utf-8')
+                
+                # Novo JS utilizando o motor Blob (Imune a falhas de memória)
                 js_print_code = f"""
                 <div style="display: flex; justify-content: flex-end; font-family: sans-serif; padding-right: 5px;">
                     <button onclick="abrirImpressao()" style="background-color: #ff4b4b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">
@@ -447,10 +450,15 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 <script>
                 function abrirImpressao() {{
                     var b64Data = "{b64}";
-                    var decodedData = decodeURIComponent(atob(b64Data).split('').map(function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join(''));
-                    var w = window.open('', '_blank');
-                    w.document.write(decodedData);
-                    w.document.close();
+                    var byteCharacters = atob(b64Data);
+                    var byteNumbers = new Array(byteCharacters.length);
+                    for (var i = 0; i < byteCharacters.length; i++) {{
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }}
+                    var byteArray = new Uint8Array(byteNumbers);
+                    var blob = new Blob([byteArray], {{type: 'text/html;charset=utf-8'}});
+                    var blobUrl = URL.createObjectURL(blob);
+                    window.open(blobUrl, '_blank');
                 }}
                 </script>
                 """
