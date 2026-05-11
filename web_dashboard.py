@@ -431,7 +431,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         @media print {{ @page {{ margin: 5mm; }} }}
                     </style>
                 </head>
-                <body onload="setTimeout(function(){{ window.print(); }}, 500);">
+                <body onload="setTimeout(function(){{ window.print(); }}, 2000);">
                     {html_print_body}
                 </body>
                 </html>
