@@ -361,7 +361,9 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 .tatico-card .funcao { color:#e0e0e0; font-size:11px; margin-bottom: 4px; }
                 .tatico-card .rg { color:#b0b4c4; font-size:11px; margin-top:auto; padding-top:4px; border-top: 1px dashed #7f8c8d; width: 100%; }
                 
+                /* CARIMBOS - TELA */
                 .carimbo-procurado { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
+                .carimbo-obito { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #8E44AD; border: 2px dashed #8E44AD; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
                 </style>
                 """, unsafe_allow_html=True)
 
@@ -400,9 +402,15 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                             
                             img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
                             
-                            tag_procurado = "<div class='carimbo-procurado'>PROCURADO</div>" if "PROCURADO" in str(p_situacao).upper() else ""
+                            # LOGICA DOS CARIMBOS
+                            sit_upper = str(p_situacao).upper()
+                            tag_status = ""
+                            if "PROCURADO" in sit_upper:
+                                tag_status = "<div class='carimbo-procurado'>PROCURADO</div>"
+                            elif "ÓBITO" in sit_upper or "OBITO" in sit_upper:
+                                tag_status = "<div class='carimbo-obito'>ÓBITO</div>"
                             
-                            html_card = f"<div class='{card_class}'>{tag_procurado}{img_tag}<div class='nome'>{p_nome}</div>"
+                            html_card = f"<div class='{card_class}'>{tag_status}{img_tag}<div class='nome'>{p_nome}</div>"
                             
                             if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
                             html_card += f"<div class='funcao'>({p_func})</div><div class='rg'><b>RG:</b> {p_rg}</div></div>"
@@ -435,7 +443,9 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         .funcao {{ font-size: 9px; margin-bottom: 2px; color: black; }}
                         .rg {{ font-size: 9px; border-top: 1px dashed #666; padding-top: 3px; margin-top: auto; width: 100%; color: black; }}
                         
+                        /* CARIMBOS - IMPRESSÃO */
                         .carimbo-procurado {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                        .carimbo-obito {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #8E44AD; border: 2px dashed #8E44AD; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                         
                         @media print {{ @page {{ margin: 5mm; }} }}
                     </style>
