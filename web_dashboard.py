@@ -364,6 +364,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 /* CARIMBOS - TELA */
                 .carimbo-procurado { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
                 .carimbo-obito { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #8E44AD; border: 2px dashed #8E44AD; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
+                .carimbo-preso { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: white; color: #444444; border: 2px dashed #444444; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; z-index: 20; letter-spacing: 0.5px; }
                 </style>
                 """, unsafe_allow_html=True)
 
@@ -402,13 +403,15 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                             
                             img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
                             
-                            # LOGICA DOS CARIMBOS
+                            # LOGICA DOS CARIMBOS BLINDADA
                             sit_upper = str(p_situacao).upper()
                             tag_status = ""
                             if "PROCURADO" in sit_upper:
                                 tag_status = "<div class='carimbo-procurado'>PROCURADO</div>"
                             elif "ÓBITO" in sit_upper or "OBITO" in sit_upper:
                                 tag_status = "<div class='carimbo-obito'>ÓBITO</div>"
+                            elif "PRESO" in sit_upper:
+                                tag_status = "<div class='carimbo-preso'>PRESO</div>"
                             
                             html_card = f"<div class='{card_class}'>{tag_status}{img_tag}<div class='nome'>{p_nome}</div>"
                             
@@ -446,6 +449,7 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         /* CARIMBOS - IMPRESSÃO */
                         .carimbo-procurado {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #E74C3C; border: 2px dashed #E74C3C; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                         .carimbo-obito {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #8E44AD; border: 2px dashed #8E44AD; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                        .carimbo-preso {{ position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background-color: white; color: #444444; border: 2px dashed #444444; border-radius: 10px; padding: 2px 6px; font-size: 9px; font-weight: bold; text-transform: uppercase; z-index: 20; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                         
                         @media print {{ @page {{ margin: 5mm; }} }}
                     </style>
