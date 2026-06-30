@@ -92,8 +92,20 @@ def carregar_dados():
         url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
         df = pd.read_csv(url)
         df.columns = [str(col).strip().upper() for col in df.columns]
+        
         if 'ANO' not in df.columns and 'DATA' in df.columns:
-            df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
+            # 🧠 MOTOR ADAPTATIVO: O format='mixed' digere múltiplos padrões de data na mesma coluna
+            df['DATA_CONVERTIDA'] = pd.to_datetime(df['DATA'], errors='coerce', format='mixed')
+            
+            # Se o format='mixed' ainda deixar algum nulo por causa do dia/mês invertido, usamos o fallback
+            linhas_nulas = df['DATA_CONVERTIDA'].isna() & df['DATA'].notna()
+            if linhas_nulas.any():
+                df.loc[linhas_nulas, 'DATA_CONVERTIDA'] = pd.to_datetime(df.loc[linhas_nulas, 'DATA'], errors='coerce', dayfirst=True)
+            
+            df['ANO'] = df['DATA_CONVERTIDA'].dt.year
+            # Remove a coluna temporária para manter o DataFrame limpo
+            df = df.drop(columns=['DATA_CONVERTIDA'])
+            
         return df
     except Exception as e:
         print(f"Erro ao baixar planilha: {e}")
