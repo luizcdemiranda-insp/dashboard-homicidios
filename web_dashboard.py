@@ -721,15 +721,6 @@ else:
     st.write("---")
     
     df = carregar_dados()
-
-    # 🚨 CÓDIGO DE RAIO-X DA PLANILHA (O LUGAR CERTO É AQUI) 🚨
-    with st.expander("🛠️ DEBUG: RAIO-X DA PLANILHA DE CRIMES", expanded=True):
-        if not df.empty:
-            st.write("Colunas que o Python conseguiu ler:", df.columns.tolist())
-            st.dataframe(df.head(3))
-        else:
-            st.error("A tabela voltou vazia! Verifique se a planilha está compartilhada e com o ID correto.")
-    # ------------------------------------------------
     
     if "VISÃO" in menu:
         st.header("📊 VISÃO GERAL")
