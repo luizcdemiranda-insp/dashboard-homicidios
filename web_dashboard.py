@@ -88,6 +88,12 @@ def render_card(titulo, valor, cor):
 # =====================================================================
 @st.cache_data
 def carregar_dados():
+    # 🚨 CÓDIGO DE RAIO-X DA PLANILHA (ADICIONE AQUI) 🚨
+    with st.expander("🛠️ DEBUG: RAIO-X DA PLANILHA DE CRIMES", expanded=True):
+        st.write("Colunas que o Python conseguiu ler:", df.columns.tolist())
+        st.write("Quantidade de linhas e colunas:", df.shape)
+        st.dataframe(df.head())
+    # ------------------------------------------------
     url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
     df = pd.read_csv(url)
     df.columns = [str(col).strip().upper() for col in df.columns]
