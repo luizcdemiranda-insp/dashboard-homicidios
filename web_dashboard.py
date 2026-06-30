@@ -88,18 +88,16 @@ def render_card(titulo, valor, cor):
 # =====================================================================
 @st.cache_data
 def carregar_dados():
-    # 🚨 CÓDIGO DE RAIO-X DA PLANILHA (ADICIONE AQUI) 🚨
-    with st.expander("🛠️ DEBUG: RAIO-X DA PLANILHA DE CRIMES", expanded=True):
-        st.write("Colunas que o Python conseguiu ler:", df.columns.tolist())
-        st.write("Quantidade de linhas e colunas:", df.shape)
-        st.dataframe(df.head())
-    # ------------------------------------------------
-    url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
-    df = pd.read_csv(url)
-    df.columns = [str(col).strip().upper() for col in df.columns]
-    if 'ANO' not in df.columns and 'DATA' in df.columns:
-        df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
-    return df
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{ID_PLANILHA_CRIMES}/export?format=csv&gid=0"
+        df = pd.read_csv(url)
+        df.columns = [str(col).strip().upper() for col in df.columns]
+        if 'ANO' not in df.columns and 'DATA' in df.columns:
+            df['ANO'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce').dt.year
+        return df
+    except Exception as e:
+        print(f"Erro ao baixar planilha: {e}")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=600)
 def carregar_dados_notion(database_id):
@@ -724,6 +722,15 @@ else:
     
     df = carregar_dados()
 
+    # 🚨 CÓDIGO DE RAIO-X DA PLANILHA (O LUGAR CERTO É AQUI) 🚨
+    with st.expander("🛠️ DEBUG: RAIO-X DA PLANILHA DE CRIMES", expanded=True):
+        if not df.empty:
+            st.write("Colunas que o Python conseguiu ler:", df.columns.tolist())
+            st.dataframe(df.head(3))
+        else:
+            st.error("A tabela voltou vazia! Verifique se a planilha está compartilhada e com o ID correto.")
+    # ------------------------------------------------
+    
     if "VISÃO" in menu:
         st.header("📊 VISÃO GERAL")
         try:
