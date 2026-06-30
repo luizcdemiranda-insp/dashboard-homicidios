@@ -310,6 +310,12 @@ def pagina_mapa():
 # =====================================================================
 def renderizar_modulo_orcrim(df_notion, nome_area):
     if not df_notion.empty:
+        # 🚨 CÓDIGO DE RAIO-X DO NOTION (ADICIONE AQUI) 🚨
+        with st.expander(f"🛠️ DEBUG: RAIO-X DO NOTION ({nome_area})", expanded=True):
+            st.write("Colunas identificadas pela API:", df_notion.columns.tolist())
+            st.write("Total de alvos (linhas) e propriedades (colunas):", df_notion.shape)
+            st.dataframe(df_notion.head(3))
+        # ------------------------------------------------
         col_territorio = next((c for c in df_notion.columns if "TERRITÓRIO" in c.upper() or "TERRITORIO" in c.upper()), "Território")
         
         terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
