@@ -17,6 +17,8 @@ import xml.etree.ElementTree as ET
 import re
 import streamlit.components.v1 as components
 import base64
+import os
+from streamlit_option_menu import option_menu # <-- NOVA BIBLIOTECA DA OPÇÃO 2
 
 # =====================================================================
 # 1. CONFIGURAÇÕES, SEGURANÇA E CSS
@@ -56,10 +58,14 @@ st.markdown("""
 def gerar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
-if "logado" not in st.session_state: st.session_state.logado = False
-if "user_nivel" not in st.session_state: st.session_state.user_nivel = None
-if "user_nome" not in st.session_state: st.session_state.user_nome = None
-if "toast_orcrim_shown" not in st.session_state: st.session_state.toast_orcrim_shown = False
+if "logado" not in st.session_state: 
+    st.session_state.logado = False
+if "user_nivel" not in st.session_state: 
+    st.session_state.user_nivel = None
+if "user_nome" not in st.session_state: 
+    st.session_state.user_nome = None
+if "toast_orcrim_shown" not in st.session_state: 
+    st.session_state.toast_orcrim_shown = False
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -94,16 +100,13 @@ def carregar_dados():
         df.columns = [str(col).strip().upper() for col in df.columns]
         
         if 'ANO' not in df.columns and 'DATA' in df.columns:
-            # 🧠 MOTOR ADAPTATIVO: O format='mixed' digere múltiplos padrões de data na mesma coluna
             df['DATA_CONVERTIDA'] = pd.to_datetime(df['DATA'], errors='coerce', format='mixed')
-            
-            # Se o format='mixed' ainda deixar algum nulo por causa do dia/mês invertido, usamos o fallback
             linhas_nulas = df['DATA_CONVERTIDA'].isna() & df['DATA'].notna()
+            
             if linhas_nulas.any():
                 df.loc[linhas_nulas, 'DATA_CONVERTIDA'] = pd.to_datetime(df.loc[linhas_nulas, 'DATA'], errors='coerce', dayfirst=True)
             
             df['ANO'] = df['DATA_CONVERTIDA'].dt.year
-            # Remove a coluna temporária para manter o DataFrame limpo
             df = df.drop(columns=['DATA_CONVERTIDA'])
             
         return df
@@ -124,9 +127,11 @@ def carregar_dados_notion(database_id):
         
         while tem_mais:
             payload = {}
-            if cursor: payload["start_cursor"] = cursor
+            if cursor: 
+                payload["start_cursor"] = cursor
             response = requests.post(url, headers=headers, json=payload)
-            if response.status_code != 200: break
+            if response.status_code != 200: 
+                break
             json_data = response.json()
             dados_brutos.extend(json_data.get("results", []))
             tem_mais = json_data.get("has_more", False)
@@ -168,8 +173,10 @@ def carregar_dados_notion(database_id):
                     linha[nome_coluna] = ", ".join([p.get("name", "N/I") for p in pessoas])
                 elif tipo == "relation":
                     relacoes = dados_coluna.get("relation", [])
-                    if relacoes: linha[nome_coluna] = "🔗 [Conexão Oculta]"
-                    else: linha[nome_coluna] = ""
+                    if relacoes: 
+                        linha[nome_coluna] = "🔗 [Conexão Oculta]"
+                    else: 
+                        linha[nome_coluna] = ""
                 elif tipo == "rollup":
                     rollup = dados_coluna.get("rollup", {})
                     r_type = rollup.get("type")
@@ -177,17 +184,22 @@ def carregar_dados_notion(database_id):
                         textos = []
                         for val in rollup.get("array", []):
                             v_type = val.get("type")
-                            if v_type in ["title", "rich_text"]: textos.append("".join([t.get("plain_text", "") for t in val.get(v_type, [])]))
+                            if v_type in ["title", "rich_text"]: 
+                                textos.append("".join([t.get("plain_text", "") for t in val.get(v_type, [])]))
                             elif v_type == "select":
                                 sel = val.get("select")
-                                if sel: textos.append(sel.get("name", ""))
+                                if sel: 
+                                    textos.append(sel.get("name", ""))
                             elif v_type == "multi_select":
                                 msel = val.get("multi_select", [])
                                 textos.append(", ".join([s.get("name", "") for s in msel]))
-                            elif v_type == "relation": textos.append("🔗 [Conexão Oculta]")
+                            elif v_type == "relation": 
+                                textos.append("🔗 [Conexão Oculta]")
                         linha[nome_coluna] = ", ".join(filter(None, textos))
-                    elif r_type == "string": linha[nome_coluna] = str(rollup.get("string", ""))
-                    else: linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
+                    elif r_type == "string": 
+                        linha[nome_coluna] = str(rollup.get("string", ""))
+                    else: 
+                        linha[nome_coluna] = str(rollup.get(r_type, "Agregação"))
                 elif tipo == "formula":
                     form = dados_coluna.get("formula", {})
                     f_type = form.get("type")
@@ -197,7 +209,8 @@ def carregar_dados_notion(database_id):
                     if arquivos:
                         arq = arquivos[0]
                         linha[nome_coluna] = arq.get("file", {}).get("url") or arq.get("external", {}).get("url") or arq.get("name", "")
-                    else: linha[nome_coluna] = ""
+                    else: 
+                        linha[nome_coluna] = ""
                 else: 
                     linha[nome_coluna] = str(dados_coluna.get(tipo, ""))
                     
@@ -207,15 +220,17 @@ def carregar_dados_notion(database_id):
         return pd.DataFrame()
 
 # =====================================================================
-# 2.6 GEOPROCESSAMENTO E MAPA (RESTAURADOS)
+# 2.6 GEOPROCESSAMENTO E MAPA 
 # =====================================================================
 @st.cache_data(ttl=3600)
 def carregar_kml_github(url):
     try:
         response = requests.get(url, timeout=15)
-        if response.status_code == 200: return response.text
+        if response.status_code == 200: 
+            return response.text
         return None
-    except: return None
+    except: 
+        return None
 
 def pagina_mapa():
     st.header("📍 GEOPROCESSAMENTO: LOCALIZAÇÃO DE FATOS")
@@ -238,7 +253,8 @@ def pagina_mapa():
         if total_pontos > limite:
             st.warning(f"⚠️ Base massiva. Exibindo os {limite} crimes mais recentes para estabilidade.")
             df_mapa = df_mapa.tail(limite)
-        else: st.success(f"✅ {total_pontos} pontos de ocorrência localizados.")
+        else: 
+            st.success(f"✅ {total_pontos} pontos de ocorrência localizados.")
 
         with st.spinner("🗺️ Renderizando motor satelital e inteligência tática..."):
             m = folium.Map(location=[-22.9068, -43.1729], zoom_start=11, control_scale=True)
@@ -278,11 +294,16 @@ def pagina_mapa():
                             ext_text = "".join(ext_node.itertext()) if ext_node is not None else ""
                             texto_busca = f"{nome_area} {desc_text} {ext_text}".upper()
                             
-                            if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: cor_area, faccao = "#E74C3C", "CV"
-                            elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: cor_area, faccao = "#3498DB", "TCP"
-                            elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: cor_area, faccao = "#F39C12", "MILÍCIA"
-                            elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca: cor_area, faccao = "#27AE60", "ADA"
-                            else: cor_area, faccao = "#95A5A6", "N/I"
+                            if "CV" in texto_busca or "COMANDO VERMELHO" in texto_busca: 
+                                cor_area, faccao = "#E74C3C", "CV"
+                            elif "TCP" in texto_busca or "TERCEIRO COMANDO" in texto_busca: 
+                                cor_area, faccao = "#3498DB", "TCP"
+                            elif "MILICIA" in texto_busca or "MILÍCIA" in texto_busca: 
+                                cor_area, faccao = "#F39C12", "MILÍCIA"
+                            elif "ADA" in texto_busca or "AMIGOS DOS AMIGOS" in texto_busca: 
+                                cor_area, faccao = "#27AE60", "ADA"
+                            else: 
+                                cor_area, faccao = "#95A5A6", "N/I"
                                 
                             polygons = placemark.findall('.//Polygon')
                             for poly in polygons:
@@ -294,19 +315,23 @@ def pagina_mapa():
                                     for pt in pontos_brutos[::passo]:
                                         valores = pt.split(',')
                                         if len(valores) >= 2:
-                                            try: coords_limpas.append([float(valores[1].strip()), float(valores[0].strip())]) 
-                                            except: pass
+                                            try: 
+                                                coords_limpas.append([float(valores[1].strip()), float(valores[0].strip())]) 
+                                            except: 
+                                                pass
                                     if len(coords_limpas) >= 3:
                                         folium.Polygon(locations=coords_limpas, color=cor_area, weight=1.5, opacity=0.8, fill=True, fill_color=cor_area, fill_opacity=0.15, tooltip=f"<div style='font-family:sans-serif; text-align:center;'><b>{nome_area}</b><br><span style='color:{cor_area}; font-weight:bold;'>{faccao}</span></div>").add_to(camada_areas)
                         camada_areas.add_to(m)
-            except Exception as e: st.error(f"⚠️ Erro KML: {e}")
+            except Exception as e: 
+                st.error(f"⚠️ Erro KML: {e}")
 
             folium.LayerControl().add_to(m)
             st_folium(m, width=1200, height=600, returned_objects=[])
-    else: st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
+    else: 
+        st.error("⚠️ Colunas de Latitude/Longitude não encontradas.")
 
 # =====================================================================
-# NOVA FUNÇÃO: RENDERIZAR MÓDULO ORCRIM (GENÉRICA PARA TODAS AS ÁREAS)
+# RENDERIZAR MÓDULO ORCRIM (GENÉRICA PARA TODAS AS ÁREAS)
 # =====================================================================
 def renderizar_modulo_orcrim(df_notion, nome_area):
     if not df_notion.empty:
@@ -315,12 +340,13 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
         terr_disponiveis = sorted([str(x) for x in df_notion[col_territorio].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
         nomes_disponiveis = sorted([str(x) for x in df_notion["Nome"].dropna().unique() if str(x).strip() and str(x).upper() != "NAN"], key=str.lower)
 
-        # Chaves dinâmicas baseadas no nome_area evitam conflito entre as abas
         key_terr = f"t_busca_{nome_area}"
         key_alvo = f"a_busca_{nome_area}"
         
-        if key_terr not in st.session_state: st.session_state[key_terr] = ""
-        if key_alvo not in st.session_state: st.session_state[key_alvo] = ""
+        if key_terr not in st.session_state: 
+            st.session_state[key_terr] = ""
+        if key_alvo not in st.session_state: 
+            st.session_state[key_alvo] = ""
         
         def limpar_buscas(): 
             st.session_state[key_terr] = ""
@@ -349,13 +375,20 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
 
             if atuacao_alvo and atuacao_alvo.upper() not in ["NAN", "N/I", "NONE", "AGREGAÇÃO", ""]:
                 df_area = df_notion[df_notion[col_territorio] == atuacao_alvo]
-                def clean_text(txt): return str(txt).replace('"', '').replace('\n', ' ').strip()
+                
+                def clean_text(txt): 
+                    return str(txt).replace('"', '').replace('\n', ' ').strip()
+                
                 def get_nivel(funcao):
                     f_up = str(funcao).upper()
-                    if "DONO" in f_up: return 1, "DONO"
-                    elif "FRENTE" in f_up: return 2, "FRENTE"
-                    elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: return 3, "GERÊNCIA / LIDERANÇA"
-                    else: return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
+                    if "DONO" in f_up: 
+                        return 1, "DONO"
+                    elif "FRENTE" in f_up: 
+                        return 2, "FRENTE"
+                    elif "GERENTE" in f_up or "LÍDER" in f_up or "LIDER" in f_up: 
+                        return 3, "GERÊNCIA / LIDERANÇA"
+                    else: 
+                        return 4, "INTEGRANTES / OUTRAS FUNÇÕES"
                 
                 orgs = df_area["Organização"].dropna().unique().tolist()
                 
@@ -389,7 +422,8 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 
                 for org in orgs:
                     org_cl = clean_text(org)
-                    if org_cl.upper() in ["NAN", "N/I", "", "-"]: continue
+                    if org_cl.upper() in ["NAN", "N/I", "", "-"]: 
+                        continue
                     
                     html_tela += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
                     html_print_body += f"<div class='orcrim-box'><h3>⚙️ ORCRIM: {org_cl}</h3>"
@@ -404,22 +438,25 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                         rg = clean_text(r.get("RG", "N/I"))
                         situacao = clean_text(r.get("Situação", ""))
                         
-                        if nome.upper() in ["NAN", "N/I", "", "-"]: continue
+                        if nome.upper() in ["NAN", "N/I", "", "-"]: 
+                            continue
+                            
                         idx, nome_nivel = get_nivel(func)
-                        if idx not in ranks: ranks[idx] = []
+                        if idx not in ranks: 
+                            ranks[idx] = []
                         ranks[idx].append((nome, func, foto, vulgo, rg, situacao)) 
 
                     for rank_idx in sorted(ranks.keys()):
                         nome_nivel = get_nivel(ranks[rank_idx][0][1])[1]
                         html_tela += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
                         html_print_body += f"<div class='nivel-header'>{nome_nivel}</div><div class='cards-container'>"
+                        
                         for p_nome, p_func, p_foto, p_vulgo, p_rg, p_situacao in ranks[rank_idx]:
                             is_alvo = (p_nome == clean_text(alvo_selecionado))
                             card_class = "tatico-card alvo" if is_alvo else "tatico-card"
                             
                             img_tag = f"<img src='{p_foto}'>" if str(p_foto).startswith("http") else "<div class='no-foto'>👤</div>"
                             
-                            # LOGICA DOS CARIMBOS BLINDADA
                             sit_upper = str(p_situacao).upper()
                             tag_status = ""
                             if "PROCURADO" in sit_upper:
@@ -431,11 +468,14 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                             
                             html_card = f"<div class='{card_class}'>{tag_status}{img_tag}<div class='nome'>{p_nome}</div>"
                             
-                            if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
+                            if p_vulgo and p_vulgo.upper() not in ["NAN", "N/I", ""]: 
+                                html_card += f"<div class='vulgo'>\"{p_vulgo}\"</div>"
+                                
                             html_card += f"<div class='funcao'>({p_func})</div><div class='rg'><b>RG:</b> {p_rg}</div></div>"
                             
                             html_tela += html_card
                             html_print_body += html_card
+                            
                         html_tela += "</div>"
                         html_print_body += "</div>"
                     html_tela += "</div>"
@@ -501,7 +541,8 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 """
                 components.html(js_print_code, height=55)
                 st.markdown(html_tela, unsafe_allow_html=True)
-            else: st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
+            else: 
+                st.info("Selecione um território ou qualificado na busca acima para gerar o organograma da área correspondente.")
 
         with aba_dos:
             if alvo_selecionado:
@@ -509,8 +550,10 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 col_foto, col_info = st.columns([1, 2])
                 with col_foto:
                     foto_url = dados_alvo.get("Foto", "")
-                    if str(foto_url).startswith("http"): st.image(foto_url, use_container_width=True)
-                    else: st.info("👤 Sem foto no arquivo.")
+                    if str(foto_url).startswith("http"): 
+                        st.image(foto_url, use_container_width=True)
+                    else: 
+                        st.info("👤 Sem foto no arquivo.")
                 with col_info:
                     vulgo = dados_alvo.get("Vulgo", "N/I")
                     st.markdown(f"<h2>{alvo_selecionado} <span style='color:#E74C3C; font-size:24px;'>({vulgo})</span></h2>", unsafe_allow_html=True)
@@ -524,7 +567,8 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                     st.write("---")
                     st.markdown("#### 📝 Informe Analítico")
                     st.warning(dados_alvo.get("Informe", ""))
-            else: st.info("Aguardando seleção de um qualificado no buscador acima.")
+            else: 
+                st.info("Aguardando seleção de um qualificado no buscador acima.")
 
         with aba_tab:
             ordem_ideal = ["Nome", "Vulgo", "RG", "Foto", "Território", "Organização", "Função", "Situação", "Rede social", "Informe"] 
@@ -542,19 +586,24 @@ def renderizar_modulo_orcrim(df_notion, nome_area):
                 
                 if col_at:
                     sel_at = c1.multiselect(f"{col_at}:", df_notion[col_at].dropna().unique().tolist(), key=f"sel_at_{nome_area}")
-                    if sel_at: df_filt = df_filt[df_filt[col_at].isin(sel_at)]
+                    if sel_at: 
+                        df_filt = df_filt[df_filt[col_at].isin(sel_at)]
                 if col_fn:
                     sel_fn = c2.multiselect(f"{col_fn}:", df_notion[col_fn].dropna().unique().tolist(), key=f"sel_fn_{nome_area}")
-                    if sel_fn: df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
+                    if sel_fn: 
+                        df_filt = df_filt[df_filt[col_fn].isin(sel_fn)]
                 if col_org:
                     sel_org = c3.multiselect(f"{col_org}:", df_notion[col_org].dropna().unique().tolist(), key=f"sel_org_{nome_area}")
-                    if sel_org: df_filt = df_filt[df_filt[col_org].isin(sel_org)]
+                    if sel_org: 
+                        df_filt = df_filt[df_filt[col_org].isin(sel_org)]
 
             st.write("---")
             cfg = {}
             for c in df_filt.columns:
-                if "FOTO" in c.upper() or "IMAGEM" in c.upper(): cfg[c] = st.column_config.ImageColumn(c, width="small") 
-                elif df_filt[c].astype(str).str.startswith("http").any(): cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
+                if "FOTO" in c.upper() or "IMAGEM" in c.upper(): 
+                    cfg[c] = st.column_config.ImageColumn(c, width="small") 
+                elif df_filt[c].astype(str).str.startswith("http").any(): 
+                    cfg[c] = st.column_config.LinkColumn(c, display_text="🔗")
             st.dataframe(df_filt, column_config=cfg, use_container_width=True)
     else:
         st.error(f"Erro ao sincronizar base de dados da {nome_area}. Verifique a conexão com o Notion.")
@@ -599,9 +648,12 @@ def tela_acesso():
                                 st.session_state.user_nivel = user_match.iloc[0]['NIVEL']
                                 st.session_state.user_nome = user_match.iloc[0]['NOME']
                                 st.rerun()
-                            else: st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
-                        else: st.error("Matrícula ou Senha incorretos.")
-                    else: st.error("Falha ao contatar o servidor de credenciais. Tente novamente.")
+                            else: 
+                                st.warning("Acesso Pendente. Aguarde a liberação do Administrador.")
+                        else: 
+                            st.error("Matrícula ou Senha incorretos.")
+                    else: 
+                        st.error("Falha ao contatar o servidor de credenciais. Tente novamente.")
 
         with aba_cadastro:
             n_cad = st.text_input("Nome Completo", key="cad_nome_input")
@@ -626,8 +678,10 @@ def tela_acesso():
                         server.send_message(msg)
                         server.quit()
                         st.success("✅ Solicitação enviada!")
-                    except: st.error("Erro ao processar solicitação.")
-                else: st.warning("Preencha todos os campos.")
+                    except: 
+                        st.error("Erro ao processar solicitação.")
+                else: 
+                    st.warning("Preencha todos os campos.")
 
 # =====================================================================
 # 4. DASHBOARD 
@@ -645,11 +699,14 @@ def gerar_dashboard(df_filtrado):
     total_procedimentos = len(df_filtrado)
     if COL_VITIMAS and COL_VITIMAS in df_filtrado.columns:
         total_vitimas = pd.to_numeric(df_filtrado[COL_VITIMAS].astype(str).str.replace(',', '.'), errors='coerce').fillna(0).sum()
-    else: total_vitimas = 0
+    else: 
+        total_vitimas = 0
 
     c1, c2 = st.columns(2)
-    with c1: render_kpi("📊 TOTAL PROCEDIMENTOS", f"{total_procedimentos:,}".replace(',', '.'), "#ff4b4b")
-    with c2: render_kpi("👤 TOTAL VÍTIMAS", f"{int(total_vitimas):,}".replace(',', '.'), "#F1C40F")
+    with c1: 
+        render_kpi("📊 TOTAL PROCEDIMENTOS", f"{total_procedimentos:,}".replace(',', '.'), "#ff4b4b")
+    with c2: 
+        render_kpi("👤 TOTAL VÍTIMAS", f"{int(total_vitimas):,}".replace(',', '.'), "#F1C40F")
 
     st.write("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -659,13 +716,15 @@ def gerar_dashboard(df_filtrado):
         if COL_DIA:
             tabela_dia = df_filtrado.groupby([COL_DIA, 'ANO']).size().reset_index(name='TOTAL')
             tabela_dia = tabela_dia[~tabela_dia[COL_DIA].astype(str).str.contains("NAN|NONE", case=False, na=False)]
-            if not tabela_dia.empty: st.altair_chart(alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
+            if not tabela_dia.empty: 
+                st.altair_chart(alt.Chart(tabela_dia).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_DIA}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
 
     with col2:
         st.markdown("### 🗺️ POR CIRCUNSCRIÇÃO")
         if COL_CIRCUNSCRICAO:
             tabela_circ = df_filtrado.groupby([COL_CIRCUNSCRICAO, 'ANO']).size().reset_index(name='TOTAL')
-            if not tabela_circ.empty: st.altair_chart(alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
+            if not tabela_circ.empty: 
+                st.altair_chart(alt.Chart(tabela_circ).mark_bar().encode(x='TOTAL:Q', y=alt.Y(f'{COL_CIRCUNSCRICAO}:N', sort='-x'), color='ANO:N').properties(height=350), use_container_width=True)
 
     st.write("<br>", unsafe_allow_html=True)
     st.markdown("### ⚖️ ATRIBUIÇÃO DE CRIMES (ORCRIM)")
@@ -674,22 +733,31 @@ def gerar_dashboard(df_filtrado):
 
     if col_orcrim:
         col_orcrim_data = df_filtrado[col_orcrim].iloc[:, 0] if isinstance(df_filtrado[col_orcrim], pd.DataFrame) else df_filtrado[col_orcrim]
+        
         def classificar_orcrim(texto):
             t = str(texto).strip().upper() 
-            if "INVESTIGA" in t: return "EM INVESTIGAÇÃO"
-            if "X MIL" in t or "VS MIL" in t: return "TRÁFICO X MILÍCIA"
-            if "TRÁFICO" in t or "TRAFICO" in t: return "TRÁFICO"
-            if "MILÍCIA" in t or "MILICIA" in t: return "MILÍCIA"
+            if "INVESTIGA" in t: 
+                return "EM INVESTIGAÇÃO"
+            if "X MIL" in t or "VS MIL" in t: 
+                return "TRÁFICO X MILÍCIA"
+            if "TRÁFICO" in t or "TRAFICO" in t: 
+                return "TRÁFICO"
+            if "MILÍCIA" in t or "MILICIA" in t: 
+                return "MILÍCIA"
             return "OUTROS"
 
         df_filtrado_orcrim = df_filtrado.copy()
         df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] = col_orcrim_data.apply(classificar_orcrim)
         
         card1, card2, card3, card4 = st.columns(4)
-        with card1: render_card("EM INVESTIGAÇÃO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO']), "#F1C40F")
-        with card2: render_card("TRÁFICO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO']), "#E74C3C")
-        with card3: render_card("MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA']), "#3498DB")
-        with card4: render_card("TRÁFICO X MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA']), "#9B59B6")
+        with card1: 
+            render_card("EM INVESTIGAÇÃO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'EM INVESTIGAÇÃO']), "#F1C40F")
+        with card2: 
+            render_card("TRÁFICO", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO']), "#E74C3C")
+        with card3: 
+            render_card("MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'MILÍCIA']), "#3498DB")
+        with card4: 
+            render_card("TRÁFICO X MILÍCIA", len(df_filtrado_orcrim[df_filtrado_orcrim['ORCRIM_CLASSIFICADO'] == 'TRÁFICO X MILÍCIA']), "#9B59B6")
 
 # =====================================================================
 # 5. LÓGICA DE NAVEGAÇÃO PRINCIPAL E MÓDULOS DE ORCRIM
@@ -698,12 +766,32 @@ if not st.session_state.logado:
     tela_acesso()
 else:
     st.sidebar.markdown(f"### Olá, {st.session_state.user_nome}")
-    lista_menu = ["1. VISÃO GERAL", "2. ORCRIM", "3. MAPA", "4. MODO ANALÍTICO", "5. ASSISTENTE IA"]
-    if st.session_state.user_nivel == "Master": lista_menu.append("⚙️ CONFIGURAÇÕES")
+    
+    # --- NOVO MENU ESTILO OPÇÃO 2 ---
+    menu_options = ["VISÃO GERAL", "ORCRIM", "MAPA", "MODO ANALÍTICO", "ASSISTENTE IA"]
+    menu_icons = ["bar-chart-line", "diagram-3", "geo-alt", "table", "robot"]
+    
+    if st.session_state.user_nivel == "Master": 
+        menu_options.append("CONFIGURAÇÕES")
+        menu_icons.append("gear")
         
-    menu = st.sidebar.radio("NAVEGAÇÃO", lista_menu)
+    with st.sidebar:
+        menu = option_menu(
+            menu_title="NAVEGAÇÃO",
+            options=menu_options,
+            icons=menu_icons,
+            menu_icon="cast",
+            default_index=0,
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "icon": {"color": "#b0b4c4", "font-size": "18px"}, 
+                "nav-link": {"font-size": "14px", "text-align": "left", "margin":"2px", "--hover-color": "#2d3446"},
+                "nav-link-selected": {"background-color": "#ff4b4b", "color": "white", "font-weight": "bold"},
+            }
+        )
 
-    if "ORCRIM" not in menu: st.session_state.toast_orcrim_shown = False
+    if "ORCRIM" not in menu: 
+        st.session_state.toast_orcrim_shown = False
 
     sub_menu_orcrim = None
     if "ORCRIM" in menu:
@@ -721,11 +809,13 @@ else:
     col_logos, col_titulo = st.columns([1.5, 4])
     with col_logos:
         logos_ativos = []
-        try: open("logo1.png"); logos_ativos.append("logo1.png")
-        except: pass
-        try: open("logo2.png"); logos_ativos.append("logo2.png")
-        except: pass
-        if logos_ativos: st.image(logos_ativos, width=85)
+        if os.path.exists("logo1.png"): 
+            logos_ativos.append("logo1.png")
+        if os.path.exists("logo2.png"): 
+            logos_ativos.append("logo2.png")
+        
+        if logos_ativos: 
+            st.image(logos_ativos, width=85)
             
     with col_titulo:
         st.markdown("<h1 style='text-align: left; margin-top: 10px;'>🛡️ SISTEMA MERCÚRIO</h1>", unsafe_allow_html=True)
@@ -739,7 +829,8 @@ else:
         try:
             data_atualizacao = df.iloc[-1, 5] 
             st.markdown(f"<div style='color:#2ecc71; font-size:11px; font-style:italic; margin-top:-15px; margin-bottom:15px;'>Base atualizada em: {data_atualizacao}</div>", unsafe_allow_html=True)
-        except: pass 
+        except: 
+            pass 
 
         df['ANO'] = df['ANO'].astype(int).astype(str)
         anos_disp = sorted(df['ANO'].unique().tolist(), reverse=True)
@@ -752,25 +843,33 @@ else:
         else:
             st.write("**SELECIONE OS ANOS:**")
             def sel_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = True
+                for a in anos_disp: 
+                    st.session_state[f"chk_vg_{a}"] = True
             def limp_all():
-                for a in anos_disp: st.session_state[f"chk_vg_{a}"] = False
+                for a in anos_disp: 
+                    st.session_state[f"chk_vg_{a}"] = False
             for ano in anos_disp:
-                if f"chk_vg_{ano}" not in st.session_state: st.session_state[f"chk_vg_{ano}"] = True
+                if f"chk_vg_{ano}" not in st.session_state: 
+                    st.session_state[f"chk_vg_{ano}"] = True
 
             b1, b2, _ = st.columns([2, 2, 6])
             b1.button("✓ Todos", on_click=sel_all, key="btn_all_vg")
             b2.button("✗ Limpar", on_click=limp_all, key="btn_clear_vg")
+            
             col_a = st.columns(min(len(anos_disp), 8) or 1, gap="small")
-            for i, ano in enumerate(anos_disp): col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
+            for i, ano in enumerate(anos_disp): 
+                col_a[i % len(col_a)].checkbox(ano, key=f"chk_vg_{ano}")
             anos_selecionados = [a for a in anos_disp if st.session_state.get(f"chk_vg_{a}", False)]
 
         if len(anos_selecionados) > 0:
             df_filtrado = df[df['ANO'].isin(anos_selecionados)].copy()
             st.write("---")
-            if df_filtrado.empty: st.warning("Nenhuma ocorrência encontrada.")
-            else: gerar_dashboard(df_filtrado) 
-        else: st.warning("⚠️ Selecione pelo menos um ano.")
+            if df_filtrado.empty: 
+                st.warning("Nenhuma ocorrência encontrada.")
+            else: 
+                gerar_dashboard(df_filtrado) 
+        else: 
+            st.warning("⚠️ Selecione pelo menos um ano.")
 
     # =====================================================================
     # NAVEGAÇÃO DINÂMICA DE ÁREAS (1, 2, 3, 4)
@@ -814,5 +913,7 @@ else:
 
     elif "CONFIGURAÇÕES" in menu:
         st.header("⚙️ Administrador")
-        try: st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
-        except: st.error("Erro ao carregar usuários.")
+        try: 
+            st.dataframe(conn.read(spreadsheet=ID_PLANILHA_ACESSO, worksheet="USUARIOS"))
+        except: 
+            st.error("Erro ao carregar usuários.")
