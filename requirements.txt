@@ -7,4 +7,4 @@ requests
 folium
 streamlit-folium
 geopy
-
+streamlit-option-menu
